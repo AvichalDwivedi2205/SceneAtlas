@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+.env*
+!.env.example
+.vercel/
+.playwright-mcp/
+playwright-report/
+test-results/
+coverage/
+agents/.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.tsbuildinfo
+.DS_Store
+.vercel

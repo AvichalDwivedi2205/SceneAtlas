@@ -1,0 +1,1342 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "script"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "pageCount": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "assetId": {
+          "type": "string"
+        },
+        "pageAssetId": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "sceneCount": {
+          "default": 0,
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "kind",
+        "filename",
+        "pageCount",
+        "summary",
+        "sceneCount"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "scene"
+        },
+        "number": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "heading": {
+          "type": "string"
+        },
+        "excerpt": {
+          "type": "string"
+        },
+        "pageStart": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pageEnd": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "setting": {
+          "type": "string"
+        },
+        "interiorExterior": {
+          "type": "string",
+          "enum": [
+            "INT",
+            "EXT",
+            "INT/EXT",
+            "UNKNOWN"
+          ]
+        },
+        "timeOfDay": {
+          "type": "string"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "durationMinutes": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "durationBasis": {
+          "default": "unknown",
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "estimate",
+            "unknown"
+          ]
+        },
+        "candidateCount": {
+          "default": 3,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "ranking": {
+          "default": "creative",
+          "type": "string",
+          "enum": [
+            "creative",
+            "cost",
+            "moves"
+          ]
+        },
+        "windows": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1439
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1440
+              }
+            },
+            "required": [
+              "date",
+              "start",
+              "end"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "number",
+        "heading",
+        "excerpt",
+        "pageStart",
+        "pageEnd",
+        "setting",
+        "interiorExterior",
+        "timeOfDay",
+        "needs",
+        "durationMinutes",
+        "durationBasis",
+        "candidateCount",
+        "ranking",
+        "windows"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "question"
+        },
+        "key": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "suggestions": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ingest",
+              "scenes",
+              "research",
+              "requirements",
+              "schedule",
+              "chat",
+              "packet",
+              "interpret"
+            ]
+          }
+        },
+        "answer": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolution": {
+          "default": "open",
+          "type": "string",
+          "enum": [
+            "open",
+            "answered",
+            "unknown"
+          ]
+        },
+        "rule": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  ]
+                },
+                "strength": {
+                  "type": "string",
+                  "enum": [
+                    "hard",
+                    "preference"
+                  ]
+                },
+                "origin": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "script",
+                    "source",
+                    "estimate"
+                  ]
+                },
+                "explanation": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "value",
+                "strength",
+                "origin",
+                "explanation"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "prompt",
+        "reason",
+        "suggestions",
+        "blocks",
+        "answer",
+        "resolution",
+        "rule"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "answer"
+        },
+        "questionId": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "original": {
+          "type": "string"
+        },
+        "rule": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  ]
+                },
+                "strength": {
+                  "type": "string",
+                  "enum": [
+                    "hard",
+                    "preference"
+                  ]
+                },
+                "origin": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "script",
+                    "source",
+                    "estimate"
+                  ]
+                },
+                "explanation": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "value",
+                "strength",
+                "origin",
+                "explanation"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resolution": {
+          "type": "string",
+          "enum": [
+            "answered",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "questionId",
+        "question",
+        "original",
+        "rule",
+        "resolution"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "location"
+        },
+        "name": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "creativeFit": {
+          "type": "string"
+        },
+        "restrictions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "availability": {
+          "default": "unverified",
+          "type": "string",
+          "const": "unverified"
+        },
+        "authority": {
+          "type": "string"
+        },
+        "sources": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "excerpt": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "retrievedAt": {
+                "type": "number"
+              },
+              "searchId": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "parallel",
+                  "official",
+                  "user"
+                ]
+              },
+              "cached": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "url",
+              "title",
+              "excerpt",
+              "retrievedAt",
+              "provider",
+              "cached"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "imageUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "imageSourceUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "costs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "amountMinor": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "currency": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 3
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "hour",
+                  "day",
+                  "application",
+                  "location",
+                  "flat"
+                ]
+              },
+              "quantity": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "basis": {
+                "type": "string",
+                "enum": [
+                  "published",
+                  "quote",
+                  "estimate",
+                  "unknown"
+                ]
+              },
+              "coverageKey": {
+                "type": "string"
+              },
+              "coverageReason": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "excerpt": {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "retrievedAt": {
+                    "type": "number"
+                  },
+                  "searchId": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "parallel",
+                      "official",
+                      "user"
+                    ]
+                  },
+                  "cached": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "url",
+                  "title",
+                  "excerpt",
+                  "retrievedAt",
+                  "provider",
+                  "cached"
+                ],
+                "additionalProperties": false
+              },
+              "assumptions": {
+                "default": "",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "amountMinor",
+              "currency",
+              "unit",
+              "quantity",
+              "basis",
+              "coverageKey",
+              "coverageReason",
+              "assumptions"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "authority": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "sourced",
+                  "unresolved",
+                  "unsupported"
+                ]
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "excerpt": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "retrievedAt": {
+                      "type": "number"
+                    },
+                    "searchId": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "parallel",
+                        "official",
+                        "user"
+                      ]
+                    },
+                    "cached": {
+                      "default": false,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "url",
+                    "title",
+                    "excerpt",
+                    "retrievedAt",
+                    "provider",
+                    "cached"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "leadTime": {
+                "type": "string"
+              },
+              "formUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "applicableFacts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "externalStatus": {
+                "default": "unverified",
+                "type": "string",
+                "const": "unverified"
+              }
+            },
+            "required": [
+              "title",
+              "detail",
+              "authority",
+              "status",
+              "sources",
+              "attachments",
+              "applicableFacts",
+              "externalStatus"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sceneIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rejected": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "address",
+        "description",
+        "creativeFit",
+        "restrictions",
+        "availability",
+        "authority",
+        "sources",
+        "costs",
+        "requirements",
+        "sceneIds",
+        "rejected"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "plan"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "budgetMode": {
+          "type": "string",
+          "enum": [
+            "fixed",
+            "uncapped"
+          ]
+        },
+        "budgetMinor": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currency": {
+          "default": "USD",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "cost",
+            "moves",
+            "days",
+            "creative"
+          ]
+        },
+        "idealShoot": {
+          "default": "",
+          "type": "string"
+        },
+        "rules": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              },
+              "strength": {
+                "type": "string",
+                "enum": [
+                  "hard",
+                  "preference"
+                ]
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "user",
+                  "script",
+                  "source",
+                  "estimate"
+                ]
+              },
+              "explanation": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "field",
+              "value",
+              "strength",
+              "origin",
+              "explanation"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "dates": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timezone": {
+          "default": "America/Los_Angeles",
+          "type": "string"
+        },
+        "dayStart": {
+          "default": 480,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1439
+        },
+        "dayEnd": {
+          "default": 1080,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440
+        },
+        "moveMinutes": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "setupMinutes": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timingBasis": {
+          "default": "unknown",
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "estimate",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "budgetMode",
+        "budgetMinor",
+        "currency",
+        "priority",
+        "idealShoot",
+        "rules",
+        "dates",
+        "timezone",
+        "dayStart",
+        "dayEnd",
+        "moveMinutes",
+        "setupMinutes",
+        "timingBasis"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "schedule"
+        },
+        "planId": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sceneId": {
+                "type": "string"
+              },
+              "sceneNumber": {
+                "type": "number"
+              },
+              "locationId": {
+                "type": "string"
+              },
+              "locationName": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              },
+              "start": {
+                "type": "number"
+              },
+              "end": {
+                "type": "number"
+              },
+              "durationBasis": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sceneId",
+              "sceneNumber",
+              "locationId",
+              "locationName",
+              "date",
+              "start",
+              "end",
+              "durationBasis",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provisional": {
+          "type": "boolean"
+        },
+        "moves": {
+          "type": "number"
+        },
+        "days": {
+          "type": "number"
+        },
+        "explanation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "planId",
+        "entries",
+        "conflicts",
+        "provisional",
+        "moves",
+        "days",
+        "explanation"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "authority": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "sourced",
+            "unresolved",
+            "unsupported"
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "excerpt": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "retrievedAt": {
+                "type": "number"
+              },
+              "searchId": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "parallel",
+                  "official",
+                  "user"
+                ]
+              },
+              "cached": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "url",
+              "title",
+              "excerpt",
+              "retrievedAt",
+              "provider",
+              "cached"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "leadTime": {
+          "type": "string"
+        },
+        "formUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "applicableFacts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "externalStatus": {
+          "default": "unverified",
+          "type": "string",
+          "const": "unverified"
+        },
+        "kind": {
+          "type": "string",
+          "const": "requirement"
+        },
+        "locationId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "detail",
+        "authority",
+        "status",
+        "sources",
+        "attachments",
+        "applicableFacts",
+        "externalStatus",
+        "kind",
+        "locationId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "cost"
+        },
+        "locationId": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "amountMinor": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "currency": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 3
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "hour",
+                  "day",
+                  "application",
+                  "location",
+                  "flat"
+                ]
+              },
+              "quantity": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "basis": {
+                "type": "string",
+                "enum": [
+                  "published",
+                  "quote",
+                  "estimate",
+                  "unknown"
+                ]
+              },
+              "coverageKey": {
+                "type": "string"
+              },
+              "coverageReason": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "excerpt": {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "retrievedAt": {
+                    "type": "number"
+                  },
+                  "searchId": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "parallel",
+                      "official",
+                      "user"
+                    ]
+                  },
+                  "cached": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "url",
+                  "title",
+                  "excerpt",
+                  "retrievedAt",
+                  "provider",
+                  "cached"
+                ],
+                "additionalProperties": false
+              },
+              "assumptions": {
+                "default": "",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "amountMinor",
+              "currency",
+              "unit",
+              "quantity",
+              "basis",
+              "coverageKey",
+              "coverageReason",
+              "assumptions"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "locationId",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "packet"
+        },
+        "planId": {
+          "type": "string"
+        },
+        "assetId": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "manifestAssetId": {
+          "type": "string"
+        },
+        "builtAt": {
+          "type": "number"
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "documentStatus": {
+          "type": "string",
+          "const": "draft"
+        },
+        "externalStatus": {
+          "type": "string",
+          "const": "not_submitted"
+        }
+      },
+      "required": [
+        "kind",
+        "planId",
+        "assetId",
+        "filename",
+        "builtAt",
+        "unresolved",
+        "documentStatus",
+        "externalStatus"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "note"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 10000
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

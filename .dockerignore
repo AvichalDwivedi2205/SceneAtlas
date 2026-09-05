@@ -1,0 +1,9 @@
+.git
+.next
+node_modules
+agents/.venv
+.env*
+.playwright-mcp
+__pycache__
+*.pyc
+tests

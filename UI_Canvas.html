@@ -1,0 +1,793 @@
+<!-- Throwaway UI prototype: validates the workspace-to-packet flow before production implementation. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SceneAtlas — canvas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --ink:#131610; --ink-2:#181c14;
+  --line:rgba(233,238,220,.10); --line-2:rgba(233,238,220,.18);
+  --hi:rgba(255,255,255,.16);
+  --fg:#EDF0E2; --fg-2:#A7AD98; --fg-3:#767C69;
+  --brass:#DCA83C; --brass-dim:rgba(220,168,60,.16);
+  --moss:#86B06A; --moss-dim:rgba(134,176,106,.15);
+  --clay:#CC6250; --clay-dim:rgba(204,98,80,.16);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--ink);color:var(--fg);font-family:"Archivo",system-ui,sans-serif;font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;user-select:none}
+h1,h2,h3,h4{font-family:"Bricolage Grotesque","Archivo",sans-serif;font-weight:500;margin:0;letter-spacing:-.012em}
+p{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:6px}
+
+.app{position:fixed;inset:0;display:flex;flex-direction:column}
+.topbar{position:relative;z-index:30;display:flex;align-items:center;gap:13px;padding:11px 16px;
+  border-bottom:1px solid var(--line);background:rgba(19,22,16,.7);
+  backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%)}
+.brand{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:500;white-space:nowrap}
+.brand i{width:8px;height:8px;border-radius:50%;background:var(--brass);flex:none}
+.crumb{color:var(--fg-3);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp{flex:1}
+.seg{display:flex;padding:3px;gap:2px;border-radius:11px;background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.seg button{font-size:12.5px;color:var(--fg-3);padding:4px 11px;border-radius:8px}
+.seg button.on{background:rgba(255,255,255,.10);color:var(--fg);box-shadow:inset 0 1px 0 var(--hi)}
+.hidden{display:none!important}
+.flow-screen,.view-panel{position:relative;flex:1;overflow:auto;background-color:var(--ink-2);
+  background-image:radial-gradient(rgba(233,238,220,.13) 1px,transparent 1px);background-size:26px 26px}
+.flow-inner{position:relative;z-index:2;width:min(1040px,calc(100% - 40px));margin:0 auto;padding:42px 0 100px}
+.flow-title{font-size:30px;line-height:1.1}.flow-copy{color:var(--fg-2);max-width:58ch;margin-top:9px}
+.workspace-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:26px}
+.workspace-card,.flow-card,.dropzone,.panel-card{border-radius:15px;background:rgba(255,255,255,.055);border:1px solid var(--line-2);
+  box-shadow:inset 0 1px 0 var(--hi),0 20px 50px rgba(0,0,0,.3)}
+.workspace-card{padding:18px;text-align:left}.workspace-card h3{font-size:16px}.workspace-card p{margin-top:5px}
+.workspace-card.new{border-style:dashed;min-height:156px;display:flex;flex-direction:column;justify-content:center}
+.flow-card{padding:22px}.dropzone{margin-top:22px;padding:52px 24px;text-align:center;border-style:dashed;cursor:pointer}
+.dropzone.dragover{border-color:rgba(220,168,60,.7);background:var(--brass-dim)}
+.drop-icon{width:48px;height:48px;border-radius:13px;border:1px solid var(--line-2);display:grid;place-items:center;margin:0 auto 14px;color:var(--brass);font-size:22px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.field-label{font-size:11.5px;color:var(--fg-3);display:block;margin-bottom:6px}
+.text-input{width:100%;border:1px solid var(--line-2);background:rgba(255,255,255,.05);color:var(--fg);border-radius:9px;padding:10px 11px;font:inherit}
+.flow-actions{display:flex;gap:9px;align-items:center;margin-top:18px;flex-wrap:wrap}
+.agent-list{margin-top:24px}.agent-step{display:flex;gap:13px;padding:15px 0;border-top:1px solid var(--line)}.agent-step:first-child{border-top:0}
+.agent-pip{width:9px;height:9px;border-radius:50%;background:var(--fg-3);margin-top:6px;flex:none}.agent-step.done .agent-pip{background:var(--moss)}.agent-step.live .agent-pip{background:var(--brass)}.agent-step.blocked .agent-pip{background:var(--clay)}
+.agent-step h4{font-size:13.5px}.agent-step p{font-size:12px;color:var(--fg-3);margin-top:2px}
+.view-panel{padding:26px}.view-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1100px;margin:0 auto}.panel-card{padding:20px}.panel-card h2{font-size:17px}
+.panel-head{max-width:1100px;margin:0 auto 16px;display:flex;align-items:center;gap:12px}.panel-head h1{font-size:22px}.metric{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+.schedule-row{padding:11px 0;border-top:1px solid var(--line)}.schedule-row strong{font-size:13.5px;font-weight:500}.schedule-row p{font-size:12px;color:var(--fg-3);margin-top:2px}
+.impact{position:absolute;inset:0;z-index:80;background:rgba(8,10,7,.7);display:grid;place-items:center;padding:20px}.impact-card{width:min(680px,94vw);border-radius:16px;background:#20251b;border:1px solid var(--line-2);box-shadow:0 30px 90px rgba(0,0,0,.65)}
+.impact-head,.impact-body,.impact-foot{padding:16px 19px}.impact-head{border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}.impact-body{display:grid;grid-template-columns:1fr 1fr;gap:14px}.impact-foot{border-top:1px solid var(--line);display:flex;gap:9px;justify-content:flex-end}
+.affected-list{margin:9px 0 0;padding-left:18px;color:var(--fg-2);font-size:13px}
+@media(max-width:760px){.workspace-grid,.view-grid,.form-grid,.impact-body{grid-template-columns:1fr}.flow-inner{width:min(100% - 24px,1040px);padding-top:24px}.topbar{flex-wrap:wrap}.crumb{max-width:40vw}}
+
+.viewport{position:relative;flex:1;overflow:hidden;cursor:grab;touch-action:none;background-color:var(--ink-2);
+  background-image:radial-gradient(rgba(233,238,220,.13) 1px, transparent 1px)}
+.viewport::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(1100px 620px at 22% 0%, rgba(220,168,60,.05), transparent 70%)}
+.viewport.panning{cursor:grabbing}
+.world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+svg.wires{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+.wire{fill:none;stroke:rgba(233,238,220,.24);stroke-width:1.4}
+.wire.qa{stroke:rgba(220,168,60,.5);stroke-dasharray:5 5}
+.wire.share{stroke:rgba(134,176,106,.6);stroke-width:1.8}
+.wire.cold{stroke:rgba(204,98,80,.4);stroke-dasharray:4 6}
+
+.node{position:absolute;border-radius:15px;background:rgba(255,255,255,.055);border:1px solid var(--line-2);
+  backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);
+  box-shadow:inset 0 1px 0 var(--hi), 0 20px 50px rgba(0,0,0,.42)}
+.node.sel{border-color:rgba(220,168,60,.6);box-shadow:inset 0 1px 0 var(--hi),0 0 0 3px rgba(220,168,60,.15),0 20px 54px rgba(0,0,0,.46)}
+.node.drag{box-shadow:inset 0 1px 0 var(--hi),0 30px 70px rgba(0,0,0,.5)}
+.node.stale{border-color:rgba(204,98,80,.5);border-style:dashed}
+.nhead{display:flex;align-items:center;gap:9px;padding:11px 13px;cursor:grab}
+.node.drag .nhead{cursor:grabbing}
+.nhead .tt{flex:1;min-width:0}
+.nhead h3{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nhead .sub{color:var(--fg-3);font-size:11.5px}
+.caret{color:var(--fg-3);font-size:11px;padding:3px 6px;border-radius:6px}
+.caret:hover{background:rgba(255,255,255,.07);color:var(--fg)}
+.nbody{padding:12px 13px 13px;border-top:1px solid var(--line)}
+.node.collapsed .nbody{display:none}
+
+.node.hub{background:rgba(220,168,60,.09);border-color:rgba(220,168,60,.34)}
+.node.hub.quiet{background:rgba(255,255,255,.045);border-color:var(--line-2)}
+
+.node.ans{border-radius:11px;background:rgba(255,255,255,.07)}
+.node.ans .ah{display:flex;align-items:flex-start;gap:10px;padding:10px 11px;cursor:grab}
+.node.ans .tt{flex:1;min-width:0}
+.node.ans .q{font-size:11.5px;color:var(--fg-3);line-height:1.4;margin-bottom:6px}
+.node.ans .ansrow{display:flex;align-items:center;gap:8px}
+.node.ans .v{font-size:13px;color:var(--fg);line-height:1.3;font-weight:500}
+.node.ans .edit{margin-top:1px}
+.node.ans .edit{font-size:11px;color:var(--fg-3);padding:3px 7px;border-radius:6px;border:1px solid var(--line);white-space:nowrap}
+.node.ans .edit:hover{color:var(--fg);background:rgba(255,255,255,.08)}
+.node.ans.editing{border-color:rgba(220,168,60,.55)}
+.node.ans .opts{padding:0 11px 11px;display:flex;gap:6px;flex-wrap:wrap}
+
+.dot{width:6px;height:6px;border-radius:50%;flex:none}
+.dot.moss{background:var(--moss)} .dot.clay{background:var(--clay)}
+.dot.brass{background:var(--brass)} .dot.n{background:var(--fg-3)}
+
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;line-height:1;padding:5px 9px;border-radius:7px;
+  background:rgba(255,255,255,.055);border:1px solid var(--line);color:var(--fg-2);white-space:nowrap}
+.chip.moss{background:var(--moss-dim);border-color:rgba(134,176,106,.3);color:#B9D8A3}
+.chip.clay{background:var(--clay-dim);border-color:rgba(204,98,80,.32);color:#E8A395}
+.chip.brass{background:var(--brass-dim);border-color:rgba(220,168,60,.32);color:#EFCB81}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+
+.btn{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--fg);padding:6px 12px;border-radius:9px;
+  border:1px solid var(--line-2);background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 var(--hi);white-space:nowrap;cursor:pointer}
+.btn:hover{background:rgba(255,255,255,.09)}
+.btn.pri{background:var(--brass);color:#20180a;border-color:rgba(255,255,255,.3);font-weight:500;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 6px 18px rgba(220,168,60,.2)}
+.btn.pri:hover{background:#E7B44E}
+.btn.qt{background:transparent;border-color:transparent;color:var(--fg-2)}
+.btn.sm{padding:4px 9px;font-size:11.5px;border-radius:7px}
+.btn.on{background:var(--brass-dim);border-color:rgba(220,168,60,.5);color:#EFCB81}
+
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;font-size:12.5px}
+.row+.row{border-top:1px solid rgba(233,238,220,.07)}
+.muted{color:var(--fg-3)}
+.note{font-size:12px;color:var(--fg-3);line-height:1.55}
+
+.working{position:relative;overflow:hidden}
+.working::after{content:"";position:absolute;inset:0;border-radius:15px;pointer-events:none;
+  background:linear-gradient(100deg,transparent 30%,rgba(220,168,60,.14) 50%,transparent 70%);background-size:250% 100%}
+@media(prefers-reduced-motion:no-preference){
+  .working::after{animation:sweep 1.25s linear infinite}
+  @keyframes sweep{from{background-position:120% 0}to{background-position:-120% 0}}
+}
+
+.float{position:absolute;z-index:20;border-radius:13px;background:rgba(255,255,255,.06);border:1px solid var(--line-2);
+  backdrop-filter:blur(26px) saturate(155%);-webkit-backdrop-filter:blur(26px) saturate(155%);
+  box-shadow:inset 0 1px 0 var(--hi),0 14px 36px rgba(0,0,0,.42)}
+.tools{top:14px;left:14px;display:flex;gap:2px;padding:4px}
+.tools button{font-size:12.5px;color:var(--fg-2);padding:6px 11px;border-radius:9px}
+.tools button.on{background:rgba(255,255,255,.11);color:var(--fg);box-shadow:inset 0 1px 0 var(--hi)}
+.tray{top:14px;right:14px;width:264px;padding:12px 13px}
+.tray h4{font-size:12.5px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.tray .item{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid rgba(233,238,220,.07);cursor:pointer}
+.tray .item:hover .t{color:var(--fg)}
+.tray .item .t{font-size:12.5px;color:var(--fg-2);line-height:1.4}
+.tray .item .w{font-size:11px;color:var(--fg-3)}
+.zoom{bottom:14px;right:14px;display:flex;align-items:center;gap:4px;padding:5px}
+.zoom button{padding:5px 10px;border-radius:8px;font-size:12.5px;color:var(--fg-2)}
+.zoom button:hover{background:rgba(255,255,255,.08);color:var(--fg)}
+.zoom .lvl{min-width:52px;text-align:center;font-size:12.5px;font-variant-numeric:tabular-nums}
+.zoom .div{width:1px;height:18px;background:var(--line-2);margin:0 3px}
+.askbar{bottom:14px;left:50%;transform:translateX(-50%);width:min(540px,calc(100% - 460px));
+  display:flex;align-items:center;gap:9px;padding:7px 7px 7px 10px}
+.askbar .scope{font-size:11.5px;padding:5px 9px;border-radius:8px;background:var(--brass-dim);color:#EFCB81;
+  border:1px solid rgba(220,168,60,.3);white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.askbar input{flex:1;min-width:0;background:none;border:0;color:var(--fg);font:inherit;font-size:13px;padding:4px 2px}
+.askbar input::placeholder{color:var(--fg-3)}
+@media(max-width:980px){.askbar{width:calc(100% - 28px)}.tray{display:none}}
+
+.toast{position:absolute;z-index:50;bottom:76px;left:50%;transform:translateX(-50%) translateY(8px);
+  padding:9px 14px;border-radius:11px;font-size:12.5px;background:rgba(255,255,255,.08);border:1px solid var(--line-2);
+  backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 var(--hi),0 14px 34px rgba(0,0,0,.4);
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:min(560px,80vw);text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.hint{position:absolute;z-index:20;left:14px;top:62px;font-size:11.5px;color:var(--fg-3);max-width:330px;line-height:1.5}
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <button class="brand" id="brandHome"><i></i>SceneAtlas</button>
+    <span class="crumb" id="crumb">Workspaces</span>
+    <span class="sp"></span>
+    <span class="chip clay hidden" id="openCount"><i class="dot clay"></i>3 open</span>
+    <div class="seg hidden" id="viewTabs"><button class="on" data-view="canvas">Canvas</button><button data-view="schedule">Schedule</button><button data-view="packet">Packet</button></div>
+    <button class="btn pri hidden" id="exportPacket">Export packet</button>
+  </header>
+
+  <section class="flow-screen" id="workspaceScreen">
+    <div class="flow-inner">
+      <h1 class="flow-title">Production workspaces</h1>
+      <p class="flow-copy">Each screenplay gets one living graph for questions, scenes, locations, plans, and paperwork.</p>
+      <div class="workspace-grid">
+        <button class="workspace-card" id="openExisting">
+          <span class="chip moss"><i class="dot moss"></i>Ready</span>
+          <h3 style="margin-top:18px">Coastal short</h3>
+          <p class="note">7 scenes · 3 questions open · edited 8 min ago</p>
+        </button>
+        <div class="workspace-card new">
+          <span class="chip brass" style="width:max-content">New workspace</span>
+          <label class="field-label" for="workspaceName" style="margin-top:14px">Production name</label>
+          <input class="text-input" id="workspaceName" value="Coastal short">
+          <button class="btn pri" id="newWorkspace" style="margin-top:10px;width:max-content">Create and open</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="flow-screen hidden" id="uploadScreen">
+    <div class="flow-inner" style="max-width:780px">
+      <button class="btn qt" id="backWorkspaces">← Workspaces</button>
+      <div style="margin-top:25px">
+        <span class="chip brass">Empty workspace</span>
+        <h1 class="flow-title" style="margin-top:12px" id="uploadTitle">Coastal short</h1>
+        <p class="flow-copy">Start with the screenplay. SceneAtlas will read it first, then ask about every material unknown before it searches or plans.</p>
+      </div>
+      <input type="file" id="fileInput" accept="application/pdf" hidden>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload screenplay PDF">
+        <div class="drop-icon">↓</div>
+        <h2>Drop screenplay PDF</h2>
+        <p class="note" style="margin-top:7px">or click to choose · PDF up to 50 MB</p>
+      </div>
+      <div class="flow-actions">
+        <button class="btn pri" id="useDemo">Use coastal_short.pdf</button>
+        <span class="note" id="fileLabel">No file selected</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="flow-screen hidden" id="progressScreen">
+    <div class="flow-inner" style="max-width:720px">
+      <span class="chip brass"><i class="dot brass"></i>Script agent</span>
+      <h1 class="flow-title" style="margin-top:14px">Turning the screenplay into a decision graph</h1>
+      <p class="flow-copy">The agent exposes its state. It pauses at questions instead of filling important gaps with guesses.</p>
+      <div class="flow-card agent-list">
+        <div class="agent-step" data-step="0"><span class="agent-pip"></span><span><h4>Upload screenplay</h4><p>Waiting for coastal_short.pdf</p></span></div>
+        <div class="agent-step" data-step="1"><span class="agent-pip"></span><span><h4>Read and structure script</h4><p>Identify headings, characters, props, timing, and production signals</p></span></div>
+        <div class="agent-step" data-step="2"><span class="agent-pip"></span><span><h4>Find material unknowns</h4><p>Turn missing production decisions into clarification questions</p></span></div>
+        <div class="agent-step" data-step="3"><span class="agent-pip"></span><span><h4>Generate scene nodes</h4><p>Connect each scene to the script and its own question hub</p></span></div>
+        <div class="agent-step" data-step="4"><span class="agent-pip"></span><span><h4>Wait for answers</h4><p>No location search or schedule is started until required inputs are answered</p></span></div>
+      </div>
+      <div class="flow-actions"><button class="btn pri hidden" id="continueCanvas">Open script questions</button><span class="note" id="agentStatus">Starting…</span></div>
+    </div>
+  </section>
+
+  <div class="viewport hidden" id="vp">
+    <div class="world" id="world"><svg class="wires" id="wires"></svg></div>
+
+    <div class="float tools">
+      <button class="on">Move</button><button>Select</button><button>Note</button><button>Link</button>
+    </div>
+    <div class="hint">Questions and saved answers stay connected to their source. A changed filter opens an impact preview before anything regenerates.</div>
+
+    <aside class="float tray" id="tray">
+      <div id="trayContent"></div>
+    </aside>
+
+    <div class="float zoom">
+      <button id="zOut" aria-label="Zoom out">−</button><span class="lvl" id="zLvl">80%</span>
+      <button id="zIn" aria-label="Zoom in">+</button><span class="div"></span><button id="zFit">Fit</button>
+    </div>
+
+    <div class="float askbar">
+      <span class="scope" id="scope">Whole project</span>
+      <input id="ask" placeholder="Ask, or say what to change…">
+      <button class="btn pri" id="send">Send</button>
+    </div>
+    <div class="toast" id="toast"></div>
+    <div class="impact hidden" id="impactModal" role="dialog" aria-modal="true" aria-labelledby="impactTitle">
+      <div class="impact-card">
+        <div class="impact-head"><span class="dot clay"></span><span><h2 id="impactTitle">Review this change</h2><p class="note" id="impactSummary">One saved filter changed.</p></span></div>
+        <div class="impact-body">
+          <div><span class="field-label">Saved answer</span><p id="impactValue"></p></div>
+          <div><span class="field-label">Will rerun</span><ul class="affected-list" id="affectedList"></ul></div>
+        </div>
+        <div class="impact-foot"><button class="btn" id="undoChange">Undo</button><button class="btn pri" id="regenerateAffected">Regenerate affected nodes</button></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="view-panel hidden" id="scheduleView">
+    <div class="panel-head"><span><span class="chip brass">Two plans · same scene graph</span><h1 style="margin-top:9px">Compare the tradeoff, then choose</h1></span></div>
+    <div class="view-grid">
+      <article class="panel-card">
+        <span class="chip moss">Budget capped · $8,000</span><h2 style="margin-top:13px">Fewer moves, lower cost</h2>
+        <div style="margin-top:13px"><div class="metric"><span class="muted">Estimated total</span><strong>$7,460</strong></div><div class="metric"><span class="muted">Shoot days</span><strong>2</strong></div><div class="metric"><span class="muted">Company moves</span><strong>1</strong></div></div>
+        <div class="schedule-row"><strong>Day 1 · Leo Carrillo</strong><p>Scenes 1 + 2 · beach dialogue into dusk cliff wide</p></div>
+        <div class="schedule-row"><strong>Day 2 · Stage 4 backlot</strong><p>Scene 3 · diner set · controlled night</p></div>
+        <button class="btn pri" style="margin-top:12px">Choose budget plan</button>
+      </article>
+      <article class="panel-card">
+        <span class="chip brass">No budget cap</span><h2 style="margin-top:13px">Best creative fit</h2>
+        <div style="margin-top:13px"><div class="metric"><span class="muted">Estimated total</span><strong>$10,940</strong></div><div class="metric"><span class="muted">Shoot days</span><strong>3</strong></div><div class="metric"><span class="muted">Company moves</span><strong>2</strong></div></div>
+        <div class="schedule-row"><strong>Day 1 · El Matador</strong><p>Scene 1 · stronger cove geometry</p></div><div class="schedule-row"><strong>Day 2 · Point Mugu</strong><p>Scene 2 · clear west-facing cliff</p></div><div class="schedule-row"><strong>Day 3 · Rae’s Diner</strong><p>Scene 3 · practical neon interior</p></div>
+        <button class="btn" style="margin-top:12px">Choose creative plan</button>
+      </article>
+    </div>
+    <div class="panel-card" style="max-width:1100px;margin:16px auto 0"><label class="field-label" for="priorityInput">Describe what to optimize</label><div style="display:flex;gap:9px"><input class="text-input" id="priorityInput" value="Keep the beach scenes together, minimize company moves, and protect the dusk wide"><button class="btn pri" id="applyPriority">Re-rank plans</button></div><p class="note" style="margin-top:9px">Natural language becomes visible scheduling constraints. The agent asks if two priorities conflict.</p></div>
+  </section>
+
+  <section class="view-panel hidden" id="packetView">
+    <div class="panel-head"><span><span class="chip brass">Production packet</span><h1 style="margin-top:9px">Evidence and paperwork, tied to the chosen plan</h1></span></div>
+    <div class="view-grid">
+      <article class="panel-card"><h2>Ready to export</h2><div class="schedule-row"><strong>Scene breakdown</strong><p>7 scenes · cast, props, timing, selected locations</p></div><div class="schedule-row"><strong>Two-day shooting plan</strong><p>Call order, moves, daylight windows, decision rationale</p></div><div class="schedule-row"><strong>California Film Commission application</strong><p>Shared permit for scenes 1 and 2 · source attached</p></div></article>
+      <article class="panel-card"><h2>Needs confirmation</h2><div class="schedule-row"><strong>Base camp parking</strong><p><span class="chip clay">Not published</span> · contact card prepared for a call</p></div><div class="schedule-row"><strong>Location availability</strong><p><span class="chip brass">Unverified</span> · hold date: 14 Nov</p></div><div class="schedule-row"><strong>Scene 3 search</strong><p><span class="chip clay">Blocked by answer</span> · practical diner or set</p></div><button class="btn pri" style="margin-top:12px" id="packetExport">Export with unresolved items marked</button></article>
+    </div>
+    <p class="note" style="max-width:1100px;margin:15px auto">Illustrative prototype data. Every fee, lead time, availability check, and estimate is labeled by evidence status in the production product.</p>
+  </section>
+</div>
+
+<script>
+const state = {
+  answers: {
+    a_drone:   { owner:'script', k:'Drone', q:'Will any part of this shoot use a drone?', v:'No', opts:['No','Yes'] },
+    a_crew:    { owner:'script', k:'Crew size', q:'How many crew will be on the ground?', v:'12', opts:['6','12','20+'] },
+    a_area:    { owner:'script', k:'Travel limit', q:'How far from Ventura can the unit travel?', v:'60 mi of Ventura', opts:['25 mi','60 mi of Ventura','Statewide'] },
+    a_s1_type: { owner:'scene1', k:'Beach type', q:'Public sand or a private cove for this scene?', v:'Public sand', opts:['Public sand','Private cove'] },
+    a_s1_n:    { owner:'scene1', k:'Candidates', q:'How many location candidates should I bring back?', v:'3', opts:['1','3','5'] },
+    a_s1_rank: { owner:'scene1', k:'Ranking', q:'What should I rank those candidates by?', v:'Creative fit', opts:['Creative fit','Lower cost','Fewer moves'] },
+    a_s2_light:{ owner:'scene2', k:'Light', q:'Is golden hour a hard requirement for the cliff wide?', v:'Required', opts:['Required','Nice to have'] },
+    a_s2_n:    { owner:'scene2', k:'Candidates', q:'How many candidates for this scene?', v:'5', opts:['1','3','5'] }
+  },
+  open: {
+    'hub-script': { q:'How many principal photography days can the first plan use?', opts:['1 day','2 days','3 days'], k:'Shoot days' },
+    'hub-scene1': null,
+    'hub-scene2': { q:'Only 2 of 5 candidates met this brief. What should I do?', opts:['Widen to 90 mi','Accept 2','Drop to 3'], k:'Search radius' },
+    'hub-scene3': { q:'A practical diner or a dressed set? It changes the search and the permit.', opts:['Practical','Set','Not sure yet'], k:'Diner' }
+  },
+  pendingChange:null
+};
+
+const CORE = [
+  { id:'script', x:820, y:60, w:380, dot:'brass', title:'coastal_short.pdf', sub:'18 pages · 7 scenes', tag:'Script root',
+    body:`<div class="note">Script-wide questions and saved answers are connected on the right. Scenes inherit them without hiding the decision trail.</div>
+      <div class="chips" style="margin-top:11px"><button class="btn sm" data-focus-node="scene1">Scene 1</button><button class="btn sm" data-focus-node="scene2">Scene 2</button><button class="btn sm" data-focus-node="scene3">Scene 3</button><span class="chip">+4 scenes</span></div>` },
+  { id:'scene1', x:120, y:600, w:340, dot:'moss', title:'Scene 1 · Ext. beach', sub:'Day · dialogue · 2 pages',
+    body:`<div class="row" style="padding-top:0"><span class="muted">Found</span><span>3 candidates</span></div>
+      <div class="row"><span class="muted">Selected</span><span class="chip moss">Leo Carrillo</span></div>
+      <div class="row" style="padding-bottom:0"><span class="muted">Duration</span><span class="chip brass">~4h estimated</span></div>` },
+  { id:'scene2', x:840, y:600, w:340, dot:'brass', title:'Scene 2 · Ext. cliff', sub:'Dusk · wide · 1 page',
+    body:`<div class="row" style="padding-top:0"><span class="muted">Found</span><span>2 of 5 asked</span></div>
+      <div class="row"><span class="muted">Selected</span><span class="chip brass">Leo Carrillo · shared</span></div>
+      <div class="row" style="padding-bottom:0"><span class="muted">Duration</span><span class="chip brass">~2h estimated</span></div>` },
+  { id:'scene3', x:1560, y:600, w:340, dot:'clay', title:'Scene 3 · Int. diner', sub:'Night · 3 pages',
+    body:`<div class="row" style="padding-top:0"><span class="muted">Found</span><span class="chip clay">Search paused</span></div>
+      <div class="row" style="padding-bottom:0"><span class="muted">Cost so far</span><span class="muted">Not countable</span></div>` },
+  { id:'loc-leo', x:500, y:1080, w:380, dot:'moss', title:'Leo Carrillo State Beach', sub:'Serving scenes 1 and 2', tag:'Locked',
+    body:`<div class="row" style="padding-top:0"><span class="muted">Location hire</span><span>$150 / day <span class="chip moss" style="margin-left:6px">Published</span></span></div>
+      <div class="row"><span class="muted">Permit fee</span><span>$75 <span class="chip moss" style="margin-left:6px">Counted once</span></span></div>
+      <div class="row" style="padding-bottom:0"><span class="muted">Base camp parking</span><span class="chip clay">Not published</span></div>
+      <div class="note" style="margin-top:9px">Illustrative result · source and retrieval time retained</div>` },
+  { id:'req-leo', x:500, y:1400, w:380, dot:'moss', title:'State permit · CFC', sub:'Covers both beach scenes',
+    body:`<div class="row" style="padding-top:0"><span class="muted">Lead time</span><span>≥4 business days <span class="chip brass" style="margin-left:6px">Published</span></span></div>
+      <div class="row"><span class="muted">Insurance certificate</span><span class="chip moss">Sourced</span></div>
+      <div class="row" style="padding-bottom:0"><span class="muted">Availability 14 Nov</span><span class="chip clay">Not verified</span></div>` },
+  { id:'loc-diner', x:1560, y:1250, w:340, dot:'clay', title:'No location yet', sub:'Scene 3',
+    body:`<div class="note">Nothing searched. “Not sure yet” stays unresolved; a practical/set answer starts this branch.</div>` },
+  { id:'plan-budget', x:620, y:1735, w:380, dot:'brass', title:'Plan A · budget capped', sub:'Optimize lower cost and fewer moves', tag:'Draft',
+    body:`<div class="row" style="padding-top:0"><span class="muted">Budget cap</span><span>$8,000</span></div><div class="row"><span class="muted">Estimated</span><span>$7,460</span></div><div class="row" style="padding-bottom:0"><span class="muted">Shape</span><span>2 days · 1 move</span></div>` },
+  { id:'plan-creative', x:1110, y:1735, w:380, dot:'brass', title:'Plan B · no budget cap', sub:'Optimize creative fit', tag:'Draft',
+    body:`<div class="row" style="padding-top:0"><span class="muted">Budget cap</span><span>Unlimited</span></div><div class="row"><span class="muted">Estimated</span><span>$10,940</span></div><div class="row" style="padding-bottom:0"><span class="muted">Shape</span><span>3 days · 2 moves</span></div>` },
+  { id:'packet', x:865, y:2040, w:390, dot:'clay', title:'Production packet', sub:'Schedule, sources, permit forms', tag:'2 unresolved',
+    body:`<div class="row" style="padding-top:0"><span class="muted">Ready</span><span>Scene breakdown · schedule</span></div><div class="row"><span class="muted">Waiting</span><span>Parking · availability</span></div><div class="note" style="margin-top:9px">Illustrative prototype data. Unverified facts stay visibly unresolved.</div>` }
+];
+
+const HUBS = [
+  { id:'hub-script', owner:'script', x:1320, y:60,  w:330, title:'Script questions' },
+  { id:'hub-scene1', owner:'scene1', x:120,  y:860, w:330, title:'Scene 1 questions' },
+  { id:'hub-scene2', owner:'scene2', x:840,  y:860, w:330, title:'Scene 2 questions' },
+  { id:'hub-scene3', owner:'scene3', x:1560, y:860, w:330, title:'Scene 3 questions' }
+];
+
+const FLOW = [
+  ['script','scene1','wire'], ['script','scene2','wire'], ['script','scene3','wire'],
+  ['scene1','loc-leo','wire share'], ['scene2','loc-leo','wire share'],
+  ['loc-leo','req-leo','wire'], ['scene3','loc-diner','wire cold'],
+  ['req-leo','plan-budget','wire'], ['req-leo','plan-creative','wire'],
+  ['loc-diner','plan-budget','wire cold'], ['loc-diner','plan-creative','wire cold'],
+  ['plan-budget','packet','wire'], ['plan-creative','packet','wire']
+];
+
+const vp=document.getElementById('vp'), world=document.getElementById('world'), wires=document.getElementById('wires');
+const els={}; let tx=0,ty=0,k=.8,selected=null,editing=null;
+
+function makeNode(id,x,y,w,cls){
+  const el=document.createElement('div');
+  el.className='node '+(cls||''); el.dataset.id=id;
+  el.style.cssText=`left:${x}px;top:${y}px;width:${w}px`;
+  world.appendChild(el); els[id]=el; return el;
+}
+
+for (const n of CORE){
+  const el=makeNode(n.id,n.x,n.y,n.w);
+  el.innerHTML=`<div class="nhead"><span class="dot ${n.dot}"></span>
+      <span class="tt"><h3>${n.title}</h3><div class="sub">${n.sub}</div></span>
+      ${n.tag?`<span class="chip">${n.tag}</span>`:''}
+      <button class="caret" data-act="fold">▾</button></div>
+    <div class="nbody" data-body>${n.body}</div>`;
+}
+for (const h of HUBS) makeNode(h.id,h.x,h.y,h.w,'hub');
+
+function renderHub(h){
+  const el=els[h.id], q=state.open[h.id];
+  el.classList.toggle('quiet',!q);
+  const mine=Object.values(state.answers).filter(a=>a.owner===h.owner).length;
+  el.innerHTML=`<div class="nhead"><span class="dot ${q?.deferred?'clay':q?'brass':'moss'}"></span>
+      <span class="tt"><h3>${h.title}</h3><div class="sub">${mine} saved${q?` · ${q.deferred?'still unresolved':'1 open'}`:''}</div></span>
+      <button class="caret" data-act="fold">▾</button></div>
+    <div class="nbody" data-body>
+      ${q?`<p style="font-size:13px;line-height:1.5">${q.q}</p>
+        <div class="chips" style="margin-top:11px">${q.opts.map(o=>`<button class="btn sm" data-act="answer" data-hub="${h.id}" data-val="${o}">${o}</button>`).join('')}</div>
+        <p class="note" style="margin-top:10px">${q.deferred?'“Not sure yet” is saved, but this branch stays paused. Choose a production direction when ready.':'Your answer becomes a connected filter node you can change later.'}</p>`
+      :`<p class="note">Nothing open. The answer nodes wired in below are the filters this ${h.owner==='script'?'project':'scene'} is running on.</p>`}
+    </div>`;
+}
+HUBS.forEach(renderHub);
+
+function renderAnswers(){
+  for (const [id,a] of Object.entries(state.answers)){
+    let el=els[id]; if(!el) el=makeNode(id,0,0,300,'ans');
+    el.classList.toggle('editing',editing===id);
+    el.innerHTML=`<div class="ah">
+        <span class="tt">
+          <div class="q">${a.q}</div>
+          <div class="ansrow"><span class="dot ${a.deferred||a.stale?'clay':'moss'}"></span><span class="v">${a.v}</span>${a.deferred?'<span class="chip clay">Unresolved</span>':''}</div>
+        </span>
+        <button class="edit" data-act="edit" data-id="${id}">${editing===id?'Close':'Change'}</button></div>
+      ${editing===id?`<div class="opts">${a.opts.map(o=>`<button class="btn sm ${o===a.v?'on':''}" data-act="set" data-id="${id}" data-val="${o}">${o}</button>`).join('')}</div>`:''}`;
+  }
+  layoutAnswers();
+}
+function layoutAnswers(){
+  for (const h of HUBS){
+    const hub=els[h.id];
+    const mine=Object.entries(state.answers).filter(([,a])=>a.owner===h.owner).map(([id])=>id);
+    let y=hub.offsetTop+hub.offsetHeight+26;
+    const x=hub.offsetLeft+42;
+    for (const id of mine){
+      const el=els[id];
+      if(!el.dataset.moved){ el.style.left=x+'px'; el.style.top=y+'px'; y+=el.offsetHeight+12; }
+    }
+  }
+}
+
+function edgeList(){
+  const out=FLOW.slice();
+  for (const h of HUBS) out.push([h.id,h.owner,'wire qa']);
+  for (const [id,a] of Object.entries(state.answers)){
+    const hub=HUBS.find(h=>h.owner===a.owner);
+    if(hub) out.push([id,hub.id,'wire qa']);
+  }
+  return out;
+}
+function pathFor(A,B){
+  const ax=A.offsetLeft,ay=A.offsetTop,aw=A.offsetWidth,ah=A.offsetHeight;
+  const bx=B.offsetLeft,by=B.offsetTop,bw=B.offsetWidth,bh=B.offsetHeight;
+  const dx=(bx+bw/2)-(ax+aw/2), dy=(by+bh/2)-(ay+ah/2);
+  if(Math.abs(dx)>Math.abs(dy)*1.15){
+    const s=dx>0?[ax+aw,ay+ah/2]:[ax,ay+ah/2];
+    const e=dx>0?[bx,by+bh/2]:[bx+bw,by+bh/2];
+    const c=Math.max(50,Math.abs(e[0]-s[0])*.5);
+    return `M${s[0]} ${s[1]} C ${s[0]+(dx>0?c:-c)} ${s[1]}, ${e[0]-(dx>0?c:-c)} ${e[1]}, ${e[0]} ${e[1]}`;
+  }
+  const s=dy>0?[ax+aw/2,ay+ah]:[ax+aw/2,ay];
+  const e=dy>0?[bx+bw/2,by]:[bx+bw/2,by+bh];
+  const c=Math.max(45,Math.abs(e[1]-s[1])*.5);
+  return `M${s[0]} ${s[1]} C ${s[0]} ${s[1]+(dy>0?c:-c)}, ${e[0]} ${e[1]-(dy>0?c:-c)}, ${e[0]} ${e[1]}`;
+}
+function drawWires(){
+  wires.innerHTML=edgeList().map(([a,b,cls])=>
+    (els[a]&&els[b])?`<path class="${cls}" d="${pathFor(els[a],els[b])}"/>`:'').join('');
+}
+
+function apply(){
+  world.style.transform=`translate(${tx}px, ${ty}px) scale(${k})`;
+  vp.style.backgroundSize=`${26*k}px ${26*k}px`;
+  vp.style.backgroundPosition=`${tx}px ${ty}px`;
+  document.getElementById('zLvl').textContent=Math.round(k*100)+'%';
+}
+function bounds(){
+  let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+  for(const el of Object.values(els)){
+    x1=Math.min(x1,el.offsetLeft); y1=Math.min(y1,el.offsetTop);
+    x2=Math.max(x2,el.offsetLeft+el.offsetWidth); y2=Math.max(y2,el.offsetTop+el.offsetHeight);
+  }
+  return {x1,y1,w:x2-x1,h:y2-y1};
+}
+function fit(){
+  const b=bounds(),r=vp.getBoundingClientRect(),pad=80;
+  k=Math.min(1.15,Math.min((r.width-pad*2)/b.w,(r.height-pad*2)/b.h));
+  tx=(r.width-b.w*k)/2-b.x1*k; ty=(r.height-b.h*k)/2-b.y1*k; apply();
+}
+function focusNode(id){
+  const e=els[id]; if(!e) return;
+  const r=vp.getBoundingClientRect(); k=Math.max(k,.85);
+  tx=r.width/2-(e.offsetLeft+e.offsetWidth/2)*k; ty=r.height/2-(e.offsetTop+e.offsetHeight/2)*k;
+  apply(); select(id);
+}
+function zoomAt(f){
+  const r=vp.getBoundingClientRect(),cx=r.width/2,cy=r.height/2;
+  const nk=Math.min(1.7,Math.max(.25,k*f));
+  tx=cx-(cx-tx)*(nk/k); ty=cy-(cy-ty)*(nk/k); k=nk; apply();
+}
+document.getElementById('zIn').onclick=()=>zoomAt(1.18);
+document.getElementById('zOut').onclick=()=>zoomAt(1/1.18);
+document.getElementById('zFit').onclick=fit;
+
+let panning=false,px=0,py=0;
+vp.addEventListener('pointerdown',e=>{
+  if(e.target.closest('.node, .float')) return;
+  panning=true; px=e.clientX; py=e.clientY; vp.classList.add('panning');
+  vp.setPointerCapture(e.pointerId);
+  select(null); if(editing){ editing=null; renderAnswers(); drawWires(); }
+});
+vp.addEventListener('pointermove',e=>{ if(!panning) return; tx+=e.clientX-px; ty+=e.clientY-py; px=e.clientX; py=e.clientY; apply(); });
+vp.addEventListener('pointerup',()=>{panning=false;vp.classList.remove('panning')});
+vp.addEventListener('pointercancel',()=>{panning=false;vp.classList.remove('panning')});
+vp.addEventListener('wheel',e=>{
+  e.preventDefault();
+  if(e.ctrlKey||e.metaKey){
+    const r=vp.getBoundingClientRect(),cx=e.clientX-r.left,cy=e.clientY-r.top;
+    const nk=Math.min(1.7,Math.max(.25,k*Math.exp(-e.deltaY*.0022)));
+    tx=cx-(cx-tx)*(nk/k); ty=cy-(cy-ty)*(nk/k); k=nk;
+  } else { tx-=e.deltaX; ty-=e.deltaY; }
+  apply();
+},{passive:false});
+
+let drag=null;
+world.addEventListener('pointerdown',e=>{
+  const nodeEl=e.target.closest('.node'); if(!nodeEl) return;
+  select(nodeEl.dataset.id);
+  const handle=e.target.closest('.nhead, .ah');
+  if(!handle||e.target.closest('button')){ e.stopPropagation(); return; }
+  drag={el:nodeEl,sx:e.clientX,sy:e.clientY,ox:nodeEl.offsetLeft,oy:nodeEl.offsetTop};
+  nodeEl.classList.add('drag'); nodeEl.dataset.moved='1';
+  world.appendChild(nodeEl); nodeEl.setPointerCapture(e.pointerId); e.stopPropagation();
+});
+world.addEventListener('pointermove',e=>{
+  if(!drag) return;
+  drag.el.style.left=drag.ox+(e.clientX-drag.sx)/k+'px';
+  drag.el.style.top=drag.oy+(e.clientY-drag.sy)/k+'px';
+  drawWires();
+});
+world.addEventListener('pointerup',()=>{ if(drag){drag.el.classList.remove('drag'); drag=null;} });
+
+function select(id){
+  selected=id;
+  for(const [nid,el] of Object.entries(els)) el.classList.toggle('sel',nid===id);
+  const label = id ? (CORE.find(n=>n.id===id)?.title.split(' · ')[0]
+    || HUBS.find(h=>h.id===id)?.title
+    || (state.answers[id]?state.answers[id].k:id)) : 'Whole project';
+  document.getElementById('scope').textContent=label;
+}
+
+world.addEventListener('click',e=>{
+  const focus=e.target.closest('[data-focus-node]');
+  if(focus){ focusNode(focus.dataset.focusNode); return; }
+  const b=e.target.closest('[data-act]'); if(!b) return;
+  const act=b.dataset.act;
+  if(act==='fold'){ const n=b.closest('.node'); n.classList.toggle('collapsed');
+    b.textContent=n.classList.contains('collapsed')?'▸':'▾'; layoutAnswers(); drawWires(); return; }
+  if(act==='answer'){ answerQuestion(b.dataset.hub,b.dataset.val); return; }
+  if(act==='edit'){ editing = editing===b.dataset.id ? null : b.dataset.id; renderAnswers(); drawWires(); return; }
+  if(act==='set'){ changeFilter(b.dataset.id,b.dataset.val); return; }
+  if(act==='rerun'){ rerun(b.dataset.node); return; }
+});
+
+function answerQuestion(hubId,val){
+  const hub=HUBS.find(h=>h.id===hubId), q=state.open[hubId];
+  if(!hub||!q) return;
+  const oldEntry=Object.entries(state.answers).find(([,a])=>a.owner===hub.owner&&a.k===q.k);
+  const id=oldEntry?.[0]||`a_${hub.owner}_${q.k.toLowerCase().replace(/[^a-z0-9]+/g,'_')}`;
+  const before=oldEntry?{...oldEntry[1]}:null;
+  state.answers[id]={owner:hub.owner,k:q.k,q:q.q,v:val,opts:q.opts,deferred:val==='Not sure yet',stale:val!=='Not sure yet'};
+  if(val==='Not sure yet'){
+    q.deferred=true;
+    renderHub(hub); renderAnswers(); countOpen();
+    toast('Saved “Not sure yet” · Scene 3 stays paused and the question remains open');
+    return;
+  }
+  const openQuestion={...q}; delete openQuestion.deferred;
+  state.open[hubId]=null;
+  renderHub(hub); renderAnswers();
+  const hit=markStale(hub.owner);
+  state.pendingChange={type:'answer',id,hubId,before,openQuestion,owner:hub.owner,from:before?.v||'Unanswered',to:val,hit};
+  showImpact(`${q.k} answered`,before?.v||'Unanswered',val,hit);
+  countOpen();
+}
+function changeFilter(id,val){
+  const a=state.answers[id];
+  if(a.v===val){ editing=null; renderAnswers(); drawWires(); return; }
+  const was=a.v, wasDeferred=!!a.deferred;
+  const openHub=HUBS.find(h=>h.owner===a.owner&&state.open[h.id]?.k===a.k);
+  const openQuestion=openHub?{...state.open[openHub.id]}:null;
+  a.v=val; a.deferred=val==='Not sure yet'; a.stale=val!=='Not sure yet'; editing=null;
+  renderAnswers();
+  if(val==='Not sure yet'){
+    const hub=openHub||HUBS.find(h=>h.owner===a.owner);
+    state.open[hub.id]={q:a.q,opts:a.opts,k:a.k,deferred:true}; renderHub(hub); countOpen();
+    toast('Saved as unresolved · dependent work remains paused'); drawWires(); return;
+  }
+  if(openHub){ state.open[openHub.id]=null; renderHub(openHub); }
+  const hit=markStale(a.owner);
+  state.pendingChange={type:'filter',id,owner:a.owner,from:was,to:val,wasDeferred,openHubId:openHub?.id,openQuestion,hit};
+  showImpact(`${a.k} changed`,was,val,hit);
+  countOpen();
+}
+function descendants(id,seen=new Set()){
+  for(const [a,b] of FLOW) if(a===id&&!seen.has(b)){ seen.add(b); descendants(b,seen); }
+  return seen;
+}
+function markStale(ownerId){
+  const hit=new Set([ownerId,...descendants(ownerId)]);
+  for(const id of hit){
+    const el=els[id]; if(!el) continue;
+    el.classList.add('stale');
+    const body=el.querySelector('[data-body]');
+    if(body&&!body.querySelector('[data-act="rerun"]')){
+      const d=document.createElement('div');
+      d.style.cssText='margin-top:11px;display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+      d.innerHTML=`<span class="chip clay"><i class="dot clay"></i>Filters changed</span>
+        <button class="btn sm" data-act="rerun" data-node="${id}">Run again</button>`;
+      body.appendChild(d);
+    }
+  }
+  drawWires();
+  return [...hit];
+}
+function nodeName(id){ return CORE.find(n=>n.id===id)?.title||HUBS.find(h=>h.id===id)?.title||id; }
+function showImpact(label,from,to,hit){
+  document.getElementById('impactSummary').textContent=`${label}. Review the saved value and dependent work.`;
+  document.getElementById('impactValue').innerHTML=`<span class="muted">${from}</span> → <strong>${to}</strong>`;
+  document.getElementById('affectedList').innerHTML=hit.map(id=>`<li>${nodeName(id)}</li>`).join('');
+  document.getElementById('impactModal').classList.remove('hidden');
+}
+function clearStale(hit){
+  for(const id of hit){
+    const el=els[id]; if(!el) continue;
+    el.classList.remove('stale','working');
+    const d=el.querySelector('[data-act="rerun"]')?.parentElement; if(d) d.remove();
+  }
+  for(const a of Object.values(state.answers)) if(hit.includes(a.owner)) a.stale=false;
+  renderAnswers(); drawWires();
+}
+function materializeScene3(){
+  const choice=Object.values(state.answers).find(a=>a.owner==='scene3'&&a.k==='Diner');
+  if(!choice||choice.v==='Not sure yet') return false;
+  const dl=els['loc-diner'], scene=els.scene3, practical=choice.v==='Practical';
+  dl.querySelector('h3').textContent=practical?"Rae’s Diner":'Stage 4 diner backlot';
+  dl.querySelector('.sub').textContent=practical?'Oxnard · practical location':'Burbank · controlled set';
+  dl.querySelector('.dot').className='dot moss';
+  dl.querySelector('[data-body]').innerHTML=practical
+    ?`<div class="row" style="padding-top:0"><span class="muted">Location hire</span><span>$400 / night <span class="chip brass" style="margin-left:6px">Quoted</span></span></div><div class="row" style="padding-bottom:0"><span class="muted">City permit</span><span class="chip brass">Needs verification</span></div><div class="note" style="margin-top:9px">Illustrative prototype result</div>`
+    :`<div class="row" style="padding-top:0"><span class="muted">Stage hire</span><span>$1,200 / night <span class="chip brass" style="margin-left:6px">Estimated</span></span></div><div class="row" style="padding-bottom:0"><span class="muted">Permit</span><span class="chip moss">Private property path</span></div><div class="note" style="margin-top:9px">Illustrative prototype result</div>`;
+  scene.querySelector('[data-body]').innerHTML=`<div class="row" style="padding-top:0"><span class="muted">Found</span><span>3 candidates</span></div><div class="row"><span class="muted">Selected</span><span class="chip moss">${practical?'Rae’s Diner':'Stage 4 backlot'}</span></div><div class="row" style="padding-bottom:0"><span class="muted">Status</span><span class="chip brass">Needs verification</span></div>`;
+  const f=FLOW.find(x=>x[0]==='scene3'&&x[1]==='loc-diner'); if(f) f[2]='wire';
+  const packetIssue=document.querySelector('#packetView .schedule-row:nth-of-type(3) p');
+  if(packetIssue) packetIssue.innerHTML='<span class="chip brass">Candidate selected</span> · evidence still needs verification';
+  return true;
+}
+function rerunNodes(hit){
+  const targets=hit.filter(id=>els[id]);
+  targets.forEach(id=>els[id].classList.add('working'));
+  setTimeout(()=>{
+    if(targets.includes('scene3')||targets.includes('loc-diner')) materializeScene3();
+    clearStale(targets);
+    toast('Rerun finished · every new figure carries its source');
+  },1200);
+}
+function rerun(id){ rerunNodes([id]); }
+function countOpen(){
+  const n=Object.values(state.open).filter(Boolean).length;
+  document.getElementById('openCount').innerHTML=`<i class="dot ${n?'clay':'moss'}"></i>${n} open`;
+  renderTray();
+}
+function renderTray(){
+  const ownerLabel={script:'Script',scene1:'Scene 1',scene2:'Scene 2',scene3:'Scene 3'};
+  const waiting=HUBS.filter(h=>state.open[h.id]).map(h=>({focus:h.id,q:state.open[h.id].q,where:`${ownerLabel[h.owner]} · ${state.open[h.id].deferred?'answer still needed':'blocks dependent work'}`,tone:state.open[h.id].deferred?'clay':'brass'}));
+  waiting.push({focus:'loc-leo',q:'Base camp parking is not published',where:'Leo Carrillo · needs a call',tone:'brass'});
+  document.getElementById('trayContent').innerHTML=`<h4><span class="dot ${waiting.length?'clay':'moss'}"></span>Waiting on you</h4><p class="note" style="margin-bottom:2px">Each item blocks a specific decision.</p>${waiting.map(item=>`<div class="item" data-focus="${item.focus}"><span class="dot ${item.tone}" style="margin-top:6px"></span><span><span class="t">${item.q}</span><br><span class="w">${item.where}</span></span></div>`).join('')}`;
+}
+
+document.getElementById('tray').addEventListener('click',e=>{
+  const it=e.target.closest('[data-focus]'); if(it) focusNode(it.dataset.focus);
+});
+document.querySelectorAll('.tools button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tools button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+});
+document.getElementById('send').onclick=()=>{
+  const v=document.getElementById('ask').value.trim();
+  toast(v?`Reading that against ${document.getElementById('scope').textContent.toLowerCase()}…`:'Type what you want changed first');
+  document.getElementById('ask').value='';
+};
+document.getElementById('ask').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('send').click(); });
+
+let tH; function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(tH); tH=setTimeout(()=>t.classList.remove('show'),2600); }
+
+const flowScreens=['workspaceScreen','uploadScreen','progressScreen'];
+const viewPanels={canvas:'vp',schedule:'scheduleView',packet:'packetView'};
+let currentView='workspace', progressTimers=[];
+function showFlow(name){
+  currentView=name;
+  flowScreens.forEach(id=>document.getElementById(id).classList.toggle('hidden',id!==`${name}Screen`));
+  Object.values(viewPanels).forEach(id=>document.getElementById(id).classList.add('hidden'));
+  const inProject=!['workspace','upload','progress'].includes(name);
+  document.getElementById('viewTabs').classList.toggle('hidden',!inProject);
+  document.getElementById('openCount').classList.toggle('hidden',!inProject);
+  document.getElementById('exportPacket').classList.toggle('hidden',!inProject);
+  document.getElementById('crumb').textContent=name==='workspace'?'Workspaces':name==='upload'?'New workspace · add screenplay':name==='progress'?'Coastal short · script agent':'Coastal short · decision graph';
+}
+function openCanvas(){
+  flowScreens.forEach(id=>document.getElementById(id).classList.add('hidden'));
+  showView('canvas');
+  renderAnswers(); countOpen();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    layoutAnswers(); drawWires();
+    const r=vp.getBoundingClientRect(); k=r.width<800?.48:.66;
+    tx=r.width/2-(CORE.find(n=>n.id==='script').x+190)*k; ty=34; apply(); select('script');
+  }));
+}
+function showView(view){
+  currentView=view;
+  flowScreens.forEach(id=>document.getElementById(id).classList.add('hidden'));
+  Object.entries(viewPanels).forEach(([key,id])=>document.getElementById(id).classList.toggle('hidden',key!==view));
+  document.getElementById('viewTabs').classList.remove('hidden');
+  document.getElementById('openCount').classList.remove('hidden');
+  document.getElementById('exportPacket').classList.remove('hidden');
+  document.querySelectorAll('#viewTabs [data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===view));
+  document.getElementById('crumb').textContent=`Coastal short · ${view==='canvas'?'decision graph':view}`;
+  if(view==='canvas') requestAnimationFrame(()=>{apply();drawWires()});
+}
+function goHome(){
+  progressTimers.forEach(clearTimeout); progressTimers=[];
+  showFlow('workspace');
+  document.getElementById('viewTabs').classList.add('hidden');
+  document.getElementById('openCount').classList.add('hidden');
+  document.getElementById('exportPacket').classList.add('hidden');
+}
+function openUpload(){
+  const name=document.getElementById('workspaceName').value.trim()||'Untitled production';
+  document.getElementById('uploadTitle').textContent=name; showFlow('upload');
+}
+function startProcessing(fileName='coastal_short.pdf'){
+  showFlow('progress');
+  const steps=[...document.querySelectorAll('.agent-step')];
+  steps.forEach(s=>s.classList.remove('done','live','blocked'));
+  document.getElementById('continueCanvas').classList.add('hidden');
+  document.getElementById('agentStatus').textContent='Starting…';
+  progressTimers.forEach(clearTimeout); progressTimers=[];
+  steps.forEach((step,i)=>progressTimers.push(setTimeout(()=>{
+    steps.slice(0,i).forEach(s=>{s.classList.remove('live','blocked');s.classList.add('done')});
+    step.classList.add(i===steps.length-1?'blocked':'live');
+    document.getElementById('agentStatus').textContent=i===0?`${fileName} received`:i===steps.length-1?'3 decisions need your answer':step.querySelector('h4').textContent+'…';
+    if(i===steps.length-1){ document.getElementById('continueCanvas').classList.remove('hidden'); }
+  },i*430)));
+}
+
+document.getElementById('brandHome').onclick=goHome;
+document.getElementById('backWorkspaces').onclick=goHome;
+document.getElementById('newWorkspace').onclick=openUpload;
+document.getElementById('openExisting').onclick=openCanvas;
+document.getElementById('continueCanvas').onclick=openCanvas;
+document.getElementById('useDemo').onclick=()=>startProcessing('coastal_short.pdf');
+document.querySelectorAll('#viewTabs [data-view]').forEach(b=>b.onclick=()=>showView(b.dataset.view));
+document.getElementById('exportPacket').onclick=()=>showView('packet');
+document.getElementById('applyPriority').onclick=e=>{e.currentTarget.textContent='Plans re-ranked';setTimeout(()=>e.currentTarget.textContent='Re-rank plans',1800)};
+document.getElementById('packetExport').onclick=e=>{e.currentTarget.textContent='Exported with flags';e.currentTarget.classList.remove('pri')};
+const dropzone=document.getElementById('dropzone'), fileInput=document.getElementById('fileInput');
+dropzone.onclick=()=>fileInput.click();
+dropzone.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fileInput.click()}};
+fileInput.onchange=()=>{const f=fileInput.files[0];if(f){document.getElementById('fileLabel').textContent=f.name;startProcessing(f.name)}};
+['dragenter','dragover'].forEach(type=>dropzone.addEventListener(type,e=>{e.preventDefault();dropzone.classList.add('dragover')}));
+['dragleave','drop'].forEach(type=>dropzone.addEventListener(type,e=>{e.preventDefault();dropzone.classList.remove('dragover')}));
+dropzone.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f){document.getElementById('fileLabel').textContent=f.name;startProcessing(f.name)}});
+
+document.getElementById('undoChange').onclick=()=>{
+  const p=state.pendingChange; if(!p) return;
+  if(p.type==='answer'){
+    if(p.before) state.answers[p.id]=p.before; else delete state.answers[p.id];
+    state.open[p.hubId]=p.openQuestion; renderHub(HUBS.find(h=>h.id===p.hubId));
+  }else{
+    const a=state.answers[p.id]; a.v=p.from; a.deferred=p.wasDeferred; a.stale=false;
+    if(p.openHubId){state.open[p.openHubId]=p.openQuestion;renderHub(HUBS.find(h=>h.id===p.openHubId));}
+  }
+  clearStale(p.hit); state.pendingChange=null; document.getElementById('impactModal').classList.add('hidden'); countOpen(); toast('Change undone');
+};
+document.getElementById('regenerateAffected').onclick=()=>{
+  const p=state.pendingChange; if(!p) return;
+  document.getElementById('impactModal').classList.add('hidden'); state.pendingChange=null; rerunNodes(p.hit); countOpen();
+};
+
+addEventListener('resize',()=>{apply();drawWires()});
+renderAnswers();
+requestAnimationFrame(()=>{ layoutAnswers(); drawWires(); countOpen(); showFlow('workspace'); });
+</script>

@@ -34,8 +34,7 @@ def deploy():
     os.chdir(package_workdir)
     vertexai.init(project=project, location=location, staging_bucket=staging)
     app = agent_engines.AdkApp(agent=root_agent, app_name="sceneatlas", enable_tracing=True)
-    remote = agent_engines.create(
-        app,
+    options = dict(
         display_name="SceneAtlas production research coordinator",
         description="Scoped screenplay breakdown, Parallel-backed location research, scheduling, revisions, and preparation packets.",
         requirements=str(root / "agents" / "requirements.runtime.txt"),
@@ -53,6 +52,15 @@ def deploy():
         max_instances=4,
         container_concurrency=8,
     )
+    fallback_enabled = os.getenv("EXA_FALLBACK_ENABLED", "false").lower() == "true"
+    options["env_vars"]["EXA_FALLBACK_ENABLED"] = str(fallback_enabled).lower()
+    if fallback_enabled:
+        options["env_vars"]["EXA_API_KEY"] = SecretRef(secret="sceneatlas-exa-api-key", version="latest")
+    resource = os.getenv("AGENT_RUNTIME_RESOURCE", "").strip()
+    if resource:
+        remote = agent_engines.get(resource).update(agent_engine=app, **options)
+    else:
+        remote = agent_engines.create(app, **options)
     print(remote.resource_name)
 
 

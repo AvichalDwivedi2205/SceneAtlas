@@ -2,9 +2,151 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../convex/schema";
 import { api, internal } from "../convex/_generated/api";
+import { putEntity } from "../convex/lib/entities";
+import { entitySchema } from "../src/domain/model";
 
 const modules = import.meta.glob("../convex/**/*.ts");
 const setup = () => convexTest(schema, modules);
+
+it("refreshes the selected location even when its leading evidence URL changes", async () => {
+  const t = setup();
+  const owner = t.withIdentity(identity("owner", "owner@example.com"));
+  await owner.mutation(api.boards.initialize);
+  const boardId = await owner.mutation(api.boards.create, {
+    name: "Requirement refresh",
+  });
+  const fixture = await t.run(async (ctx) => {
+    const sceneId = await putEntity(ctx, {
+      boardId,
+      actor: "test",
+      logicalKey: "scene:1",
+      scope: { kind: "workspace" },
+      data: entitySchema.parse({
+        kind: "scene",
+        number: 1,
+        heading: "EXT. BEACH - DAY",
+        excerpt: "Test beach scene",
+        pageStart: 1,
+        pageEnd: 1,
+        setting: "Beach",
+        interiorExterior: "EXT",
+        timeOfDay: "DAY",
+        needs: [],
+      }),
+    });
+    const scope = { kind: "scene" as const, sceneId };
+    await ctx.db.patch(sceneId, { scope });
+    const data = entitySchema.parse({
+      kind: "location",
+      name: "Test state beach",
+      address: "California",
+      description: "Test location",
+      creativeFit: "Beach",
+      restrictions: [],
+      authority: "State Parks",
+      sources: [
+        {
+          url: "https://example.com/beach",
+          title: "Original discovery",
+          excerpt: "Beach",
+          provider: "parallel",
+          retrievedAt: 1,
+        },
+      ],
+      costs: [],
+      requirements: [],
+      sceneIds: [sceneId],
+    });
+    const locationId = await putEntity(ctx, {
+      boardId,
+      actor: "test",
+      logicalKey: "location:test-state-beach:example.com",
+      scope,
+      ownerId: sceneId,
+      data,
+    });
+    return { scope, locationId, data };
+  });
+  const runId = await owner.mutation(api.runs.start, {
+    boardId,
+    kind: "requirements",
+    targetId: fixture.locationId,
+    scope: fixture.scope,
+  });
+  await t.mutation(internal.runs.claim, { runId, attempt: 1 });
+  await t.mutation(internal.runs.event, {
+    runId,
+    attempt: 1,
+    sequence: 1,
+    status: "complete",
+    activity: "Complete",
+    result: {
+      locations: [
+        {
+          ...fixture.data,
+          sources: [
+            {
+              url: "https://film.ca.gov/state-permits/",
+              title: "Current official guidance",
+              excerpt: "Official source",
+              provider: "parallel",
+              retrievedAt: 2,
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const { entities } = await owner.query(api.boards.snapshot, { boardId });
+  expect(entities.filter((e) => e.kind === "location")).toHaveLength(1);
+  expect(entities.find((e) => e._id === fixture.locationId)!.revision).toBe(2);
+});
+
+it("places new cards without overlapping or moving an existing manual card", async () => {
+  const t = setup();
+  const owner = t.withIdentity(identity("owner", "owner@example.com"));
+  await owner.mutation(api.boards.initialize);
+  const boardId = await owner.mutation(api.boards.create, {
+    name: "Initial placement",
+  });
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 3; index++) {
+      const entityId = await putEntity(ctx, {
+        boardId,
+        data: { kind: "note", text: `New card ${index}` },
+        scope: { kind: "workspace" },
+        logicalKey: `placement:${index}`,
+        actor: "test",
+        x: 100,
+        y: 100,
+      });
+      if (index === 0) {
+        const node = await ctx.db
+          .query("nodes")
+          .withIndex("by_entity", (q) => q.eq("entityId", entityId))
+          .unique();
+        await ctx.db.patch(node!._id, { manual: true });
+      }
+    }
+  });
+  const { nodes } = await owner.query(api.boards.snapshot, { boardId });
+  expect(nodes[0]).toMatchObject({
+    x: 100,
+    y: 100,
+    manual: true,
+    geometryRevision: 1,
+  });
+  for (const [index, node] of nodes.entries()) {
+    for (const other of nodes.slice(index + 1)) {
+      const overlaps =
+        node.x < other.x + other.width &&
+        node.x + node.width > other.x &&
+        node.y < other.y + other.height &&
+        node.y + node.height > other.y;
+      expect(overlaps).toBe(false);
+    }
+  }
+});
 
 function identity(id: string, email: string) {
   return {
@@ -311,4 +453,191 @@ describe("board authorization and optimistic concurrency", () => {
     expect(run?.status).toBe("failed");
     expect(run?.activity).toBe("Agent worker did not start");
   });
+});
+
+describe("question checkpoint recovery", () => {
+  it.each([
+    { staged: false, conflict: false },
+    { staged: true, conflict: false },
+    { staged: true, conflict: true },
+  ])(
+    "waits for every blocking answer and resumes only the related scene (staged=$staged, conflict=$conflict)",
+    async ({ staged, conflict }) => {
+      const t = setup();
+      const owner = t.withIdentity(identity("owner", "owner@example.com"));
+      const userId = await owner.mutation(api.boards.initialize);
+      const boardId = await owner.mutation(api.boards.create, {
+        name: "Paused research",
+      });
+      const fixture = await t.run(async (ctx) => {
+        const now = Date.now();
+        const base = {
+          boardId,
+          revision: 1,
+          stale: false,
+          createdAt: now,
+          updatedAt: now,
+          updatedBy: userId,
+        };
+        const sceneIds = [];
+        for (const number of [1, 2]) {
+          const id = await ctx.db.insert("entities", {
+            ...base,
+            kind: "scene",
+            logicalKey: `scene:${number}`,
+            scope: { kind: "workspace" },
+            data: {
+              kind: "scene",
+              number,
+              heading: "EXT. BEACH - DAY",
+              excerpt: "Mara walks on sand.",
+              pageStart: 1,
+              pageEnd: 1,
+              setting: "Beach",
+              interiorExterior: "EXT",
+              timeOfDay: "DAY",
+              needs: [],
+              durationMinutes: null,
+              durationBasis: "unknown",
+              candidateCount: 3,
+              ranking: "creative",
+              windows: [],
+            },
+          });
+          await ctx.db.patch(id, { scope: { kind: "scene", sceneId: id } });
+          sceneIds.push(id);
+        }
+        const questionIds = [];
+        for (const key of ["area", "access"]) {
+          questionIds.push(
+            await ctx.db.insert("entities", {
+              ...base,
+              kind: "question",
+              logicalKey: key,
+              ownerId: sceneIds[0],
+              scope: { kind: "scene", sceneId: sceneIds[0] },
+              data: {
+                kind: "question",
+                key,
+                prompt: key,
+                reason: "Required for research",
+                suggestions: [],
+                blocks: ["research"],
+                answer: null,
+                resolution: "open",
+                rule: null,
+              },
+            }),
+          );
+        }
+        const origin = await ctx.db.get(sceneIds[0]);
+        const revisionId = staged
+          ? await ctx.db.insert("changes", {
+              boardId,
+              targetId: sceneIds[0],
+              baseRevision: 1,
+              before: origin!.data,
+              proposed: origin!.data,
+              affectedIds: [],
+              readVersions: [{ id: sceneIds[0], revision: 1 }],
+              status: "regenerating",
+              createdBy: userId,
+              createdAt: now,
+              summary: "Test staged research",
+              runIds: [],
+            })
+          : undefined;
+        const runs = [];
+        for (const sceneId of sceneIds)
+          runs.push(
+            await ctx.db.insert("runs", {
+              boardId,
+              kind: "research",
+              targetId: sceneId,
+              scope: { kind: "scene", sceneId },
+              status: "waiting",
+              activity: "Needs your answer",
+              createdBy: userId,
+              createdAt: now,
+              updatedAt: now,
+              inputVersions: [],
+              workKey: `paused:${sceneId}`,
+              attempt: 1,
+              eventSequence: 1,
+              changeId: sceneId === sceneIds[0] ? revisionId : undefined,
+            }),
+          );
+        if (revisionId) await ctx.db.patch(revisionId, { runIds: [runs[0]] });
+        return { questionIds, runs, sceneIds, revisionId };
+      });
+      if (conflict)
+        await t.run(async (ctx) => {
+          const scene = await ctx.db.get(fixture.sceneIds[0]);
+          await ctx.db.patch(scene!._id, {
+            revision: scene!.revision + 1,
+            data: {
+              ...scene!.data,
+              needs: ["Collaborator changed this input"],
+            },
+          });
+        });
+      for (const [index, entityId] of fixture.questionIds.entries()) {
+        const question = await t.run((ctx) => ctx.db.get(entityId));
+        const changeId = await owner.mutation(api.changes.preview, {
+          boardId,
+          entityId,
+          expectedRevision: question!.revision,
+          data: {
+            ...question!.data,
+            answer: "Confirmed test input",
+            resolution: "answered",
+          },
+        });
+        await owner.mutation(api.changes.commitInputs, { changeId });
+        const snapshot = await owner.query(api.boards.snapshot, { boardId });
+        expect(
+          snapshot.runs.find((r) => r._id === fixture.runs[1])?.status,
+        ).toBe("waiting");
+        expect(
+          snapshot.runs.find((r) => r._id === fixture.runs[0])?.status,
+        ).toBe(index === 0 ? "waiting" : "superseded");
+        expect(snapshot.runs.filter((r) => r.status === "queued")).toHaveLength(
+          index,
+        );
+      }
+      if (fixture.revisionId) {
+        const snapshot = await owner.query(api.boards.snapshot, { boardId });
+        const resumed = snapshot.runs.find((r) => r.status === "queued")!;
+        const revision = await t.run((ctx) => ctx.db.get(fixture.revisionId!));
+        expect(revision!.runIds).toEqual([resumed._id]);
+        await t.mutation(internal.runs.claim, {
+          runId: resumed._id,
+          attempt: 1,
+        });
+        await t.mutation(internal.runs.event, {
+          runId: resumed._id,
+          attempt: 1,
+          sequence: 1,
+          status: "complete",
+          activity: "Revised results ready",
+          result: { locations: [], questions: [] },
+        });
+        await t.mutation(internal.changes.advance, {
+          changeId: fixture.revisionId,
+        });
+        if (conflict) {
+          await expect(
+            owner.mutation(api.changes.apply, { changeId: fixture.revisionId }),
+          ).rejects.toThrow(/changed|updated|revision/i);
+          return;
+        }
+        await owner.mutation(api.changes.apply, {
+          changeId: fixture.revisionId,
+        });
+        expect(
+          (await t.run((ctx) => ctx.db.get(fixture.revisionId!)))!.status,
+        ).toBe("applied");
+      }
+    },
+  );
 });

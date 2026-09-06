@@ -146,6 +146,15 @@ export async function publishResult(
       .query("nodes")
       .withIndex("by_entity", (i) => i.eq("entityId", owner._id))
       .unique();
+    const questions = await ctx.db
+      .query("entities")
+      .withIndex("by_board_kind", (i) =>
+        i.eq("boardId", boardId).eq("kind", "question"),
+      )
+      .collect();
+    const siblingCount = questions.filter(
+      (question) => question.ownerId === owner._id,
+    ).length;
     const id = await putEntity(ctx, {
       boardId,
       data: q.data,
@@ -153,7 +162,7 @@ export async function publishResult(
       ownerId: owner._id,
       logicalKey: key,
       actor,
-      x: (node?.x ?? 0) + 390,
+      x: (node?.x ?? 0) + 400 * (siblingCount + 1),
       y: node?.y ?? 0,
     });
     await connect(ctx, boardId, id, owner._id, "question");
@@ -171,11 +180,32 @@ export async function publishResult(
     !["research", "requirements"].includes(run.kind)
   )
     throw new ConvexError("Unexpected research result.");
+  const refreshTarget =
+    run.kind === "requirements" && run.targetId
+      ? await ctx.db.get(run.targetId)
+      : null;
+  if (
+    run.kind === "requirements" &&
+    result.locations.length &&
+    (result.locations.length !== 1 ||
+      refreshTarget?.boardId !== boardId ||
+      refreshTarget.kind !== "location")
+  )
+    throw new ConvexError("Requirements must refresh the selected location.");
   for (const [index, raw] of result.locations.entries()) {
     if (raw.kind !== "location") throw new ConvexError("Invalid candidate.");
-    const data = { ...raw };
+    const data = refreshTarget
+      ? {
+          ...raw,
+          ...refreshTarget.data,
+          costs: raw.costs,
+          requirements: raw.requirements,
+          sources: raw.sources,
+          authority: raw.authority,
+        }
+      : { ...raw };
     if (run.scope.sceneId) data.sceneIds = [run.scope.sceneId];
-    const key = locationKey(data);
+    const key = refreshTarget?.logicalKey ?? locationKey(data);
     const previous = await ctx.db
       .query("entities")
       .withIndex("by_board_key", (q) =>

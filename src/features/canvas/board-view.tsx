@@ -46,6 +46,13 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AsyncButton } from "../../components/async-button";
+import {
+  BoardProgress,
+  RunState,
+  isPending,
+  currentRuns,
+} from "./workflow-state";
 import {
   BoardContext,
   type BoardActions,
@@ -79,6 +86,7 @@ type Props = {
   uploadProgress?: number | null;
   previewMode?: boolean;
   sharePanel?: ReactNode;
+  connected?: boolean;
 };
 const nodeTypes = { card: ProductionCard };
 export function BoardView(props: Props) {
@@ -98,6 +106,7 @@ function BoardInterior({
   uploadProgress = null,
   previewMode = false,
   sharePanel,
+  connected = true,
 }: Props) {
   const flow = useReactFlow<CardNode>();
   const [view, setView] = useState(initialView);
@@ -126,6 +135,7 @@ function BoardInterior({
   const [paste, setPaste] = useState("");
   const [scriptName, setScriptName] = useState("screenplay.txt");
   const fileInput = useRef<HTMLInputElement>(null);
+  const uploading = useRef(false);
   const viewportRestored = useRef(false);
   const editable = snapshot.role !== "viewer" && !previewMode;
   const plans = snapshot.entities.filter((e) => e.data.kind === "plan");
@@ -280,9 +290,19 @@ function BoardInterior({
       m.scope.sceneId === scope.sceneId &&
       m.scope.planId === scope.planId,
   );
+  const chatRun = [...snapshot.runs]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .find(
+      (r) =>
+        r.kind === "chat" &&
+        r.scope.kind === scope.kind &&
+        r.scope.sceneId === scope.sceneId &&
+        r.scope.planId === scope.planId,
+    );
+  const chatWorking = isPending(chatRun);
   const entity = snapshot.entities.find((e) => e._id === drawer?.id);
   const activeChange = changes.find((c) => c._id === changeId) ?? changes[0];
-  const relevantRuns = snapshot.runs.filter(
+  const relevantRuns = currentRuns(snapshot.runs).filter(
     (r) => !["complete", "cancelled", "superseded"].includes(r.status),
   );
   const signal = (
@@ -313,11 +333,17 @@ function BoardInterior({
     [],
   );
   async function uploadFile(file: File) {
+    if (uploading.current) return;
+    uploading.current = true;
     setModal(null);
-    await act(
-      () => actions.upload(file),
-      "Screenplay uploaded. Reading started.",
-    );
+    try {
+      await act(
+        () => actions.upload(file),
+        "Screenplay uploaded. Reading started.",
+      );
+    } finally {
+      uploading.current = false;
+    }
   }
   async function autoLayout() {
     await act(async () => {
@@ -374,8 +400,12 @@ function BoardInterior({
             </span>
           </div>
           <div className="topbar-right">
-            <span className="save-state">
-              {busy ? (
+            <span className={`save-state ${error ? "clay" : ""}`} role="status">
+              {!connected ? (
+                "Reconnecting…"
+              ) : error ? (
+                "Change not saved"
+              ) : busy ? (
                 <>
                   <LoaderCircle size={12} className="spin" /> Saving
                 </>
@@ -455,7 +485,7 @@ function BoardInterior({
               className={`dot ${relevantRuns.some((r) => r.status === "running") ? "brass pulse" : "moss"}`}
             />
             {relevantRuns.length
-              ? `${relevantRuns.length} active tasks`
+              ? `${relevantRuns.length} ${relevantRuns.some((r) => r.status === "failed" || r.status === "waiting") ? "tasks to review" : "active tasks"}`
               : "Activity"}
           </button>
         </div>
@@ -466,6 +496,19 @@ function BoardInterior({
             <Link href="/workspaces">
               Create workspace <ArrowUp size={12} />
             </Link>
+          </div>
+        )}
+        {!previewMode && (
+          <BoardProgress
+            runs={snapshot.runs}
+            uploadProgress={uploadProgress}
+            onActivity={() => setPanel("activity")}
+          />
+        )}
+        {!connected && (
+          <div className="connection-notice" role="status">
+            Connection interrupted. Showing saved board; pending changes will
+            sync when reconnected.
           </div>
         )}
         <div className="board-body">
@@ -499,15 +542,16 @@ function BoardInterior({
             >
               <StickyNote size={18} />
             </button>
-            <button
+            <AsyncButton
+              pendingLabel="Arranging…"
               className="rail-button"
               disabled={!editable}
               title="Arrange unmoved cards"
               aria-label="Arrange unmoved cards"
-              onClick={() => void autoLayout()}
+              onClick={autoLayout}
             >
               <GitBranch size={18} />
-            </button>
+            </AsyncButton>
             <button
               className="rail-button"
               title="Fit board (F)"
@@ -699,6 +743,12 @@ function BoardInterior({
                   {editable && (
                     <button
                       className="button primary"
+                      disabled={
+                        uploadProgress !== null ||
+                        relevantRuns.some(
+                          (r) => r.kind === "ingest" && isPending(r),
+                        )
+                      }
                       onClick={() => setModal("upload")}
                     >
                       <Upload size={15} /> Add your screenplay
@@ -707,29 +757,23 @@ function BoardInterior({
                   <span className="small muted">
                     PDF or plain text · up to 50 MB
                   </span>
-                  {uploadProgress !== null && (
-                    <div
-                      className="upload-progress"
-                      role="progressbar"
-                      aria-valuenow={uploadProgress}
-                    >
-                      <span style={{ width: `${uploadProgress}%` }} />
-                    </div>
-                  )}
-                  {relevantRuns.map((r) => (
-                    <div className="notice" key={r._id}>
-                      {r.activity}
-                      {r.error && <p className="error">{r.error}</p>}
-                      {r.status === "failed" && editable && (
-                        <button
-                          className="button tiny"
-                          onClick={() => act(() => actions.retry(r._id))}
-                        >
-                          Retry
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                  {relevantRuns
+                    .filter((r) => r.status === "failed")
+                    .map((r) => (
+                      <div className="notice" key={r._id}>
+                        {r.activity}
+                        {r.error && <p className="error">{r.error}</p>}
+                        {r.status === "failed" && editable && (
+                          <AsyncButton
+                            pendingLabel="Retrying…"
+                            className="button tiny"
+                            onClick={() => act(() => actions.retry(r._id))}
+                          >
+                            Retry
+                          </AsyncButton>
+                        )}
+                      </div>
+                    ))}
                 </div>
               )}
               {scenes.length > 0 && (
@@ -868,12 +912,16 @@ function BoardInterior({
                         )}
                       </article>
                     ))}
+                    {chatRun &&
+                      (chatWorking || chatRun.status === "failed") && (
+                        <RunState run={chatRun} />
+                      )}
                   </div>
                   <form
                     className="chat-form"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      if (!chat.trim()) return;
+                      if (!chat.trim() || chatWorking || busy) return;
                       const text = chat;
                       void act(async () => {
                         await actions.start("chat", undefined, scope, {
@@ -897,10 +945,19 @@ function BoardInterior({
                       <span>Changes need your review.</span>
                       <button
                         className="send-button"
-                        disabled={!editable || !chat.trim() || busy > 0}
-                        aria-label="Send message"
+                        disabled={
+                          !editable || !chat.trim() || busy > 0 || chatWorking
+                        }
+                        aria-label={
+                          chatWorking ? "Assistant is working" : "Send message"
+                        }
+                        aria-busy={chatWorking || busy > 0}
                       >
-                        <ArrowUp size={16} />
+                        {chatWorking || busy > 0 ? (
+                          <LoaderCircle size={16} className="spin" />
+                        ) : (
+                          <ArrowUp size={16} />
+                        )}
                       </button>
                     </footer>
                   </form>
@@ -949,7 +1006,7 @@ function BoardInterior({
                       >
                         {stateLabel[r.status]}
                       </span>
-                      <h3>{r.activity}</h3>
+                      <RunState run={r} />
                       <small>
                         {r.kind} · {new Date(r.updatedAt).toLocaleTimeString()}
                       </small>
@@ -959,22 +1016,24 @@ function BoardInterior({
                           {["queued", "running", "waiting"].includes(
                             r.status,
                           ) && (
-                            <button
+                            <AsyncButton
+                              pendingLabel="Cancelling…"
                               className="button tiny"
                               onClick={() => act(() => actions.cancel(r._id))}
                             >
                               Cancel
-                            </button>
+                            </AsyncButton>
                           )}
                           {["failed", "cancelled", "superseded"].includes(
                             r.status,
                           ) && (
-                            <button
+                            <AsyncButton
+                              pendingLabel="Retrying…"
                               className="button tiny"
                               onClick={() => act(() => actions.retry(r._id))}
                             >
                               Retry
-                            </button>
+                            </AsyncButton>
                           )}
                         </div>
                       )}
@@ -1164,9 +1223,16 @@ function BoardInterior({
                   />
                   <button
                     className="button primary"
-                    disabled={!noteText.trim()}
+                    disabled={!noteText.trim() || busy > 0}
+                    aria-busy={busy > 0}
                   >
-                    Add note
+                    {busy > 0 ? (
+                      <>
+                        <LoaderCircle size={14} className="spin" /> Adding note…
+                      </>
+                    ) : (
+                      "Add note"
+                    )}
                   </button>
                 </form>
               )}

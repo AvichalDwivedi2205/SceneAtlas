@@ -463,9 +463,14 @@
                 "type": "string",
                 "enum": [
                   "parallel",
+                  "exa",
                   "official",
                   "user"
                 ]
+              },
+              "fallbackReason": {
+                "type": "string",
+                "maxLength": 200
               },
               "cached": {
                 "default": false,
@@ -573,9 +578,14 @@
                     "type": "string",
                     "enum": [
                       "parallel",
+                      "exa",
                       "official",
                       "user"
                     ]
+                  },
+                  "fallbackReason": {
+                    "type": "string",
+                    "maxLength": 200
                   },
                   "cached": {
                     "default": false,
@@ -661,9 +671,14 @@
                       "type": "string",
                       "enum": [
                         "parallel",
+                        "exa",
                         "official",
                         "user"
                       ]
+                    },
+                    "fallbackReason": {
+                      "type": "string",
+                      "maxLength": 200
                     },
                     "cached": {
                       "default": false,
@@ -1066,9 +1081,14 @@
                 "type": "string",
                 "enum": [
                   "parallel",
+                  "exa",
                   "official",
                   "user"
                 ]
+              },
+              "fallbackReason": {
+                "type": "string",
+                "maxLength": 200
               },
               "cached": {
                 "default": false,
@@ -1224,9 +1244,14 @@
                     "type": "string",
                     "enum": [
                       "parallel",
+                      "exa",
                       "official",
                       "user"
                     ]
+                  },
+                  "fallbackReason": {
+                    "type": "string",
+                    "maxLength": 200
                   },
                   "cached": {
                     "default": false,

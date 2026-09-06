@@ -1177,7 +1177,7 @@ button:disabled {
 
 /* Nodes */
 .production-card {
-  width: 330px;
+  width: 100%;
   background: #20261b;
   border: 1px solid #46513d;
   border-radius: 9px;
@@ -2149,4 +2149,343 @@ button:disabled {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Product feedback follows the same quiet, evidence-first canvas language. */
+.board-app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+.board-topbar,
+.board-subbar,
+.preview-banner {
+  flex-shrink: 0;
+}
+.board-body,
+.sample-board .board-body {
+  height: auto;
+  flex: 1;
+  min-height: 0;
+}
+.board-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 22px 12px 62px;
+  background: linear-gradient(110deg, #24291d, #1b2017);
+  border-bottom: 1px solid #69552f;
+  flex-shrink: 0;
+  animation: state-enter 0.22s ease both;
+}
+.workflow-state {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  color: var(--brass);
+  min-width: 0;
+}
+.workflow-state > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.workflow-state strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.workflow-state p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+.workflow-state small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 5px;
+}
+.workflow-failed,
+.workflow-waiting,
+.workflow-superseded {
+  color: var(--clay);
+}
+.workflow-complete {
+  color: var(--moss);
+}
+.workflow-cancelled {
+  color: var(--muted);
+}
+.workflow-state.compact {
+  align-items: center;
+  gap: 7px;
+}
+.workflow-state.compact strong {
+  font-size: 10px;
+}
+.node-status .workflow-state {
+  flex: 1;
+}
+.upload-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(440px, 70%);
+}
+.upload-state > div {
+  flex: 1;
+  min-width: 0;
+}
+.upload-state strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.upload-state small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.upload-state .upload-progress {
+  width: 100%;
+  margin: 7px 0 2px;
+}
+.activity-item .workflow-state {
+  margin: 12px 0 8px;
+}
+.chat-messages > .workflow-state {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 12px;
+}
+.comparison-card > .workflow-state,
+.packet-main > .workflow-state,
+.inspector-content > .workflow-state {
+  margin: 18px 0;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+button[aria-busy="true"] {
+  opacity: 0.85;
+  cursor: progress;
+}
+.action-error {
+  display: block;
+  font-size: 12px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.loading-scene {
+  min-height: 65vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 32px;
+  gap: 30px;
+  background: var(--ink);
+}
+.loading-canvas {
+  min-height: 100dvh;
+  background-image: radial-gradient(var(--line-soft) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.loading-graph {
+  width: min(330px, 80vw);
+  opacity: 0.75;
+}
+.skeleton-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 19px;
+  display: grid;
+  gap: 10px;
+}
+.skeleton-card.root {
+  width: 65%;
+  margin: auto;
+}
+.skeleton-card i,
+.skeleton-line {
+  display: block;
+  height: 7px;
+  border-radius: 3px;
+  background: var(--line);
+  animation: skeleton-breathe 1.8s ease-in-out infinite;
+}
+.skeleton-card i:first-child {
+  background: #716136;
+  width: 45%;
+}
+.skeleton-card i:last-child,
+.skeleton-line.short {
+  width: 65%;
+}
+.skeleton-wire {
+  height: 36px;
+  width: 1px;
+  margin: auto;
+  background: var(--line);
+}
+.skeleton-branches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  position: relative;
+}
+.skeleton-branches:before {
+  content: "";
+  position: absolute;
+  border-top: 1px solid var(--line);
+  width: 55%;
+  left: 22%;
+  top: -14px;
+}
+.skeleton-tile .skeleton-card {
+  width: 44%;
+}
+.skeleton-line {
+  margin: 8px 0 15px;
+  height: 10px;
+}
+.loading-caption {
+  text-align: center;
+  max-width: 360px;
+}
+.loading-caption > svg {
+  margin-bottom: 10px;
+}
+.loading-caption h2 {
+  font-size: 21px;
+  margin-bottom: 8px;
+}
+.loading-caption p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.loading-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.member-row .member-saving {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--brass);
+}
+.planning-view,
+.workspace-grid,
+.chat-message,
+.toast,
+.production-card {
+  animation: state-enter 0.22s ease both;
+}
+.assistant-panel {
+  animation: panel-enter 0.24s ease both;
+}
+.entity-drawer[data-state="open"] {
+  animation: panel-enter 0.24s ease both;
+}
+.entity-drawer[data-state="closed"] {
+  animation: panel-exit 0.18s ease both;
+}
+.modal-content[data-state="open"] {
+  animation: modal-enter 0.2s ease both;
+}
+.modal-content[data-state="closed"] {
+  animation: state-exit 0.15s ease both;
+}
+.modal-overlay[data-state="open"],
+.drawer-overlay[data-state="open"] {
+  animation: state-enter 0.18s ease both;
+}
+.modal-overlay[data-state="closed"],
+.drawer-overlay[data-state="closed"] {
+  animation: state-exit 0.18s ease both;
+}
+@keyframes skeleton-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+@keyframes state-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes state-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    translate: 14px 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes panel-exit {
+  to {
+    opacity: 0;
+    translate: 14px 0;
+  }
+}
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    scale: 0.98;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@media (max-width: 700px) {
+  .board-progress {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .board-progress > button {
+    max-width: 110px;
+    white-space: normal;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+.connection-notice {
+  padding: 9px 20px;
+  background: #37281e;
+  color: #e6bb98;
+  border-bottom: 1px solid #75503c;
+  font-size: 12px;
+  text-align: center;
 }

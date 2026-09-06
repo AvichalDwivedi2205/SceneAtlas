@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from html import escape
 from io import BytesIO
+import math
 from typing import Any
 
 from reportlab.lib import colors
@@ -40,6 +41,10 @@ def _money(amount: int | None, currency: str) -> str:
     return f"{currency} {amount / 100:,.2f}"
 
 
+def _line_amount(cost: dict[str, Any]) -> int | None:
+    return None if cost.get("amountMinor") is None else math.floor(cost["amountMinor"] * cost.get("quantity", 1) + .5)
+
+
 def build_manifest(task: dict[str, Any]) -> dict[str, Any]:
     entities = task.get("entities", [])
     run = task["run"]
@@ -72,10 +77,13 @@ def build_manifest(task: dict[str, Any]) -> dict[str, Any]:
         for cost in location["data"].get("costs", []):
             key = cost.get("coverageKey") or f"{location['_id']}:{cost['id']}"
             existing = costs.get(key)
-            if existing and (existing.get("amountMinor"), existing.get("currency"), existing.get("basis")) != (cost.get("amountMinor"), cost.get("currency"), cost.get("basis")):
+            signature = lambda item: tuple(item.get(key) for key in ("amountMinor", "quantity", "currency", "unit", "basis"))
+            if existing and signature(existing) != signature(cost):
                 unresolved.append(f"Conflicting evidence for shared cost: {cost['label']}.")
-            else:
+            elif not existing:
                 costs[key] = {**cost, "locationId": location["_id"], "locationName": location["data"]["name"]}
+            if cost["currency"] != plan["data"]["currency"]:
+                unresolved.append(f"Currency conversion required: {cost['label']} ({cost['currency']}); excluded from plan totals.")
             if cost.get("amountMinor") is None:
                 unresolved.append(f"Unquoted cost: {cost['label']} at {location['data']['name']}.")
             if cost.get("source"):
@@ -104,8 +112,9 @@ def build_manifest(task: dict[str, Any]) -> dict[str, Any]:
     if schedule:
         unresolved.extend(schedule["data"].get("conflicts", []))
 
-    known = sum(c["amountMinor"] * c.get("quantity", 1) for c in costs.values() if c.get("amountMinor") is not None and c.get("basis") in {"published", "quote"})
-    estimated = sum(c["amountMinor"] * c.get("quantity", 1) for c in costs.values() if c.get("amountMinor") is not None and c.get("basis") == "estimate")
+    priced = [cost for cost in costs.values() if cost.get("amountMinor") is not None and cost["currency"] == plan["data"]["currency"]]
+    known = sum(_line_amount(c) for c in priced if c.get("basis") in {"published", "quote"})
+    estimated = sum(_line_amount(c) for c in priced if c.get("basis") == "estimate")
     versions = [{"id": e["_id"], "kind": e["kind"], "revision": e["revision"], "updatedAt": e["updatedAt"]} for e in entities]
     return {
         "schemaVersion": 1,
@@ -132,11 +141,12 @@ def build_packet(task: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
     doc = SimpleDocTemplate(buf, pagesize=LETTER, rightMargin=.55*inch, leftMargin=.55*inch, topMargin=.68*inch, bottomMargin=.58*inch, title="SceneAtlas Production Preparation Packet", author="SceneAtlas")
     base = getSampleStyleSheet()
     title = ParagraphStyle("Title", parent=base["Title"], fontName="Helvetica-Bold", fontSize=24, leading=26, textColor=INK, alignment=TA_LEFT, spaceAfter=8)
-    h1 = ParagraphStyle("H1", parent=base["Heading1"], fontName="Helvetica-Bold", fontSize=16, leading=19, textColor=INK, spaceBefore=16, spaceAfter=8)
+    h1 = ParagraphStyle("H1", parent=base["Heading1"], fontName="Helvetica-Bold", fontSize=16, leading=19, textColor=INK, spaceBefore=16, spaceAfter=8, keepWithNext=True)
     h2 = ParagraphStyle("H2", parent=base["Heading2"], fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=MOSS, spaceBefore=9, spaceAfter=4)
     body = ParagraphStyle("Body", parent=base["BodyText"], fontName="Helvetica", fontSize=8.7, leading=12, textColor=INK, spaceAfter=5)
     tiny = ParagraphStyle("Tiny", parent=body, fontSize=7.2, leading=9, textColor=MUTED)
-    warn = ParagraphStyle("Warn", parent=body, textColor=CLAY, leftIndent=8, borderColor=CLAY, borderWidth=1, borderPadding=7, spaceBefore=5, spaceAfter=5)
+    table_header = ParagraphStyle("TableHeader", parent=tiny, textColor=colors.white, fontName="Helvetica-Bold")
+    warn = ParagraphStyle("Warn", parent=body, textColor=CLAY, leftIndent=8, borderColor=CLAY, borderWidth=1, borderPadding=7, spaceBefore=10, spaceAfter=18)
     right = ParagraphStyle("Right", parent=tiny, alignment=TA_RIGHT)
 
     def footer(canvas, document):
@@ -165,11 +175,18 @@ def build_packet(task: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
         s, loc = item["scene"], item["location"]
         story.append(KeepTogether([Paragraph(f"Scene {s['number']} · {_clean(s['heading'])}", h2), Paragraph(f"<b>{_clean(loc['name'])}</b> · {_clean(loc['address'])}<br/>{_clean(loc['creativeFit'])}", body), Paragraph(f"Choice {'locked' if item['locked'] else 'selected, not locked'} · availability unverified", tiny)]))
 
+    story.append(Paragraph("Confirmed production inputs", h1))
+    confirmed = [q for q in manifest["questions"] if q.get("resolution") == "answered"]
+    if not confirmed:
+        story.append(Paragraph("No producer-confirmed answers have been recorded.", warn))
+    for question in confirmed:
+        story.append(KeepTogether([Paragraph(_clean(question["prompt"]), h2), Paragraph(_clean(question.get("answer")), body)]))
+
     story.append(PageBreak())
     story.append(Paragraph("Proposed shooting order", h1))
     schedule = manifest["schedule"]
     if schedule:
-        rows = [[Paragraph("Date / time", tiny), Paragraph("Scene", tiny), Paragraph("Location", tiny), Paragraph("Basis", tiny)]]
+        rows = [[Paragraph("Date / time", table_header), Paragraph("Scene", table_header), Paragraph("Location", table_header), Paragraph("Basis", table_header)]]
         for entry in schedule.get("entries", []):
             time_text = f"{entry['start']//60:02d}:{entry['start']%60:02d}–{entry['end']//60:02d}:{entry['end']%60:02d}"
             rows.append([Paragraph(f"{_clean(entry['date'])}<br/>{time_text}", body), Paragraph(str(entry["sceneNumber"]), body), Paragraph(_clean(entry["locationName"]), body), Paragraph(_clean(entry["durationBasis"]), tiny)])
@@ -181,11 +198,16 @@ def build_packet(task: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
     story.append(Paragraph("Cost picture", h1))
     currency = manifest["costs"]["currency"]
     story.append(Table([[Paragraph("Known / quoted", tiny), Paragraph(_money(manifest["costs"]["knownMinor"], currency), right), Paragraph("Estimated additions", tiny), Paragraph(_money(manifest["costs"]["estimatedMinor"], currency), right)]], colWidths=[1.45*inch,1.45*inch,1.7*inch,1.45*inch], style=TableStyle([("GRID",(0,0),(-1,-1),.4,LINE),("BACKGROUND",(0,0),(-1,-1),PALE),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)])))
-    cost_rows = [[Paragraph("Item", tiny), Paragraph("Amount", tiny), Paragraph("Basis / coverage", tiny)]]
+    cost_rows = [[Paragraph("Item", table_header), Paragraph("Rate × quantity", table_header), Paragraph("Total", table_header), Paragraph("Basis / coverage", table_header)]]
     for cost in manifest["costs"]["items"]:
-        cost_rows.append([Paragraph(f"{_clean(cost['label'])}<br/><font color='#62695d'>{_clean(cost['locationName'])}</font>", body), Paragraph(_money(cost.get("amountMinor"), cost["currency"]), body), Paragraph(f"{_clean(cost['basis'])} · {_clean(cost['coverageReason'])}", tiny)])
+        quantity = cost.get("quantity", 1)
+        total = _line_amount(cost)
+        assumptions = f"<br/>{_clean(cost['assumptions'])}" if cost.get("assumptions") else ""
+        source = cost.get("source")
+        citation = f'<br/><link href="{escape(source["url"], quote=True)}" color="#48613b">Fee source</link>' if source else ""
+        cost_rows.append([Paragraph(f"{_clean(cost['label'])}<br/><font color='#62695d'>{_clean(cost['locationName'])}</font>", body), Paragraph(f"{_money(cost.get('amountMinor'), cost['currency'])} / {_clean(cost.get('unit', 'item'))}<br/>× {_clean(quantity)}", body), Paragraph(_money(total, cost["currency"]), body), Paragraph(f"{_clean(cost['basis'])} · {_clean(cost['coverageReason'])}{assumptions}{citation}", tiny)])
     if len(cost_rows) > 1:
-        story.append(Table(cost_rows, colWidths=[2.25*inch,1.2*inch,3.8*inch], repeatRows=1, style=TableStyle([("BACKGROUND",(0,0),(-1,0),BRASS),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.35,LINE),("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)])))
+        story.append(Table(cost_rows, colWidths=[2*inch,1.45*inch,1.05*inch,2.75*inch], repeatRows=1, style=TableStyle([("BACKGROUND",(0,0),(-1,0),BRASS),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.35,LINE),("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,0),7),("BOTTOMPADDING",(0,0),(-1,0),7),("TOPPADDING",(0,1),(-1,-1),5),("BOTTOMPADDING",(0,1),(-1,-1),5)])))
 
     story.append(PageBreak())
     story.append(Paragraph("Requirements and source links", h1))
@@ -201,7 +223,10 @@ def build_packet(task: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
         story.append(Paragraph("No unresolved items recorded. Availability and external approval still remain outside SceneAtlas.", body))
     story.append(Paragraph("Evidence index", h1))
     for index, source in enumerate(manifest["sources"], 1):
-        story.append(Paragraph(f'{index}. <link href="{escape(source["url"], quote=True)}" color="#48613b">{_clean(source["title"])}</link><br/>{_clean(source["excerpt"])}<br/>Retrieved: {_clean(source["retrievedAt"])} · Provider: {_clean(source["provider"])}', tiny))
+        retrieved = datetime.fromtimestamp(source["retrievedAt"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        cached = " · Reused evidence" if source.get("cached") else ""
+        fallback = f" · {_clean(source['fallbackReason'])}" if source.get("fallbackReason") else ""
+        story.append(Paragraph(f'{index}. <link href="{escape(source["url"], quote=True)}" color="#48613b">{_clean(source["title"])}</link><br/>{_clean(source["excerpt"])}<br/>Retrieved: {_clean(retrieved)} · Provider: {_clean(source["provider"])}{cached}{fallback}', tiny))
     story.append(Spacer(1, 14))
     story.append(Paragraph(f"Manifest preserves {len(manifest['recordVersions'])} source record versions. Download the accompanying JSON for machine-readable provenance.", tiny))
     doc.build(story, onFirstPage=footer, onLaterPages=footer)

@@ -33,6 +33,7 @@
     "pdfjs-dist": "^5.4.296"
   },
   "devDependencies": {
+    "@clerk/testing": "^2.2.33",
     "@convex-dev/eslint-plugin": "^4.0.0",
     "@edge-runtime/vm": "^5.0.0",
     "@playwright/test": "^1.55.0",

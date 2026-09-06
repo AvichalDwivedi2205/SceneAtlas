@@ -32,6 +32,21 @@ export function relevantEntities(
           e.scope.kind === "scene")),
   );
 }
+export function blockingQuestions(
+  entities: Doc<"entities">[],
+  kind: TaskKind,
+  scope: Scope,
+) {
+  return entities.filter(
+    (e) =>
+      e.kind === "question" &&
+      e.data.resolution !== "answered" &&
+      e.data.blocks.includes(kind) &&
+      (e.scope.kind === "workspace" ||
+        Boolean(scope.sceneId && e.scope.sceneId === scope.sceneId) ||
+        Boolean(scope.planId && e.scope.planId === scope.planId)),
+  );
+}
 export async function enqueue(
   ctx: MutationCtx,
   args: {
@@ -45,6 +60,14 @@ export async function enqueue(
   },
 ) {
   taskKindSchema.parse(args.kind);
+  const change = args.changeId ? await ctx.db.get(args.changeId) : null;
+  if (
+    args.changeId &&
+    (!change ||
+      change.boardId !== args.boardId ||
+      change.status !== "regenerating")
+  )
+    throw new ConvexError("Revision is not ready to regenerate.");
   await validateScope(ctx, args.boardId, args.scope);
   const all = await ctx.db
     .query("entities")
@@ -65,15 +88,7 @@ export async function enqueue(
   };
   if (expectedKind[args.kind] && target?.kind !== expectedKind[args.kind])
     throw new ConvexError("Choose the correct card for this task.");
-  const blocking = relevant.filter(
-    (e) =>
-      e.kind === "question" &&
-      e.data.resolution !== "answered" &&
-      e.data.blocks.includes(args.kind) &&
-      (e.scope.kind === "workspace" ||
-        Boolean(args.scope.sceneId && e.scope.sceneId === args.scope.sceneId) ||
-        Boolean(args.scope.planId && e.scope.planId === args.scope.planId)),
-  );
+  const blocking = blockingQuestions(relevant, args.kind, args.scope);
   if (blocking.length)
     throw new ConvexError(
       `Answer first: ${blocking
@@ -155,6 +170,23 @@ export async function enqueue(
     request: args.request,
     changeId: args.changeId,
   });
+  if (change) {
+    const previous = await Promise.all(
+      change.runIds.map((id) => ctx.db.get(id)),
+    );
+    const retained = previous.filter(
+      (run) =>
+        run &&
+        !(
+          run.kind === args.kind &&
+          run.targetId === args.targetId &&
+          JSON.stringify(run.scope) === JSON.stringify(args.scope)
+        ),
+    );
+    await ctx.db.patch(change._id, {
+      runIds: [...retained.map((run) => run!._id), runId],
+    });
+  }
   await ctx.db.insert("outbox", {
     runId,
     attempt: 1,

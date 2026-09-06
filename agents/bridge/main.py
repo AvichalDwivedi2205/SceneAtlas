@@ -93,7 +93,7 @@ def create_task(payload: Dispatch) -> str:
 def _activity(event: dict[str, Any]) -> tuple[str | None, str | None]:
     state = (event.get("actions") or {}).get("state_delta") or (event.get("actions") or {}).get("stateDelta") or {}
     activity = state.get("activity")
-    provider_id = state.get("parallelSearchId")
+    provider_id = state.get("searchId") or state.get("parallelSearchId")
     return (activity if isinstance(activity, str) else None, provider_id if isinstance(provider_id, str) else None)
 
 
@@ -133,13 +133,18 @@ async def execute(payload: Dispatch) -> None:
         ):
             if not isinstance(event, dict):
                 continue
+            if event.get("errorMessage"):
+                raise RuntimeError(str(event["errorMessage"])[:4000])
             activity, provider_id = _activity(event)
             result = _result(event)
             if result is not None:
                 final = result
             if activity:
                 sequence += 1
-                accepted = await backend.post("event", {"sequence": sequence, "activity": activity, "providerId": provider_id})
+                progress = {"sequence": sequence, "activity": activity}
+                if provider_id:
+                    progress["providerId"] = provider_id
+                accepted = await backend.post("event", progress)
                 if accepted.get("accepted") is False:
                     return
         if final is None:

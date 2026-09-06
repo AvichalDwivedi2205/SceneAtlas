@@ -4,8 +4,8 @@ import type { Id } from "./_generated/dataModel";
 import { requireMember, boardEntity, assertRevision } from "./lib/auth";
 import { connect, putEntity, updateEntity } from "./lib/entities";
 import { affectedIds } from "../src/domain/planning";
-import { entitySchema } from "../src/domain/model";
-import { enqueue } from "./lib/jobs";
+import { entitySchema, taskKindSchema } from "../src/domain/model";
+import { enqueue, relevantEntities, blockingQuestions } from "./lib/jobs";
 import { publishResult, resultSchema } from "./lib/results";
 export const list = query({
   args: { boardId: v.id("boards") },
@@ -169,6 +169,10 @@ export const commitInputs = mutation({
           changeId,
           owner.stale,
         );
+      const questionNode = await ctx.db
+        .query("nodes")
+        .withIndex("by_entity", (q) => q.eq("entityId", target._id))
+        .unique();
       const answerId = await putEntity(ctx, {
         boardId: change.boardId,
         data: {
@@ -183,6 +187,8 @@ export const commitInputs = mutation({
         ownerId: target.ownerId,
         logicalKey: `${target._id}:answer`,
         actor: user._id,
+        x: questionNode?.x,
+        y: questionNode ? questionNode.y + questionNode.height + 60 : undefined,
       });
       await connect(ctx, change.boardId, target._id, answerId, "answer", false);
     }
@@ -214,28 +220,59 @@ export const commitInputs = mutation({
       .query("runs")
       .withIndex("by_board", (q) => q.eq("boardId", change.boardId))
       .collect();
-    for (const run of waiting)
-      if (
+    for (const run of waiting) {
+      const kind = taskKindSchema.parse(run.kind);
+      const inputs = relevantEntities(boardAfter, run.scope, run.targetId);
+      const relatedCheckpoint =
         run.status === "waiting" &&
-        (run.scope.kind === "workspace" ||
-          run.scope.sceneId === target.scope.sceneId ||
-          run.scope.planId === target.scope.planId)
+        target.kind === "question" &&
+        target.data.blocks.includes(run.kind) &&
+        inputs.some((e) => e._id === target._id);
+      if (relatedCheckpoint && run.changeId) {
+        const origin = await ctx.db.get(run.changeId);
+        if (origin?.status === "regenerating") {
+          // Accept only revision increments made by this answer transaction.
+          // A prior collaborator edit must still fail the later apply check.
+          await ctx.db.patch(origin._id, {
+            readVersions: origin.readVersions.map((version) => {
+              const old = boardBefore.find(
+                (entity) => entity._id === version.id,
+              );
+              const current = boardAfter.find(
+                (entity) => entity._id === version.id,
+              );
+              return old?.revision === version.revision && current
+                ? { id: version.id, revision: current.revision }
+                : version;
+            }),
+          });
+        }
+      }
+      if (
+        relatedCheckpoint &&
+        blockingQuestions(inputs, kind, run.scope).length === 0
       ) {
-        await ctx.db.patch(run._id, { status: "superseded" });
         try {
-          await enqueue(ctx, {
+          const next = await enqueue(ctx, {
             boardId: run.boardId,
             userId: user._id,
-            kind: run.kind as "research",
+            kind,
             scope: run.scope,
             targetId: run.targetId,
             request: run.request,
             changeId: run.changeId,
           });
+          if (next !== run._id)
+            await ctx.db.patch(run._id, {
+              status: "superseded",
+              activity: "Resumed with your answers",
+              updatedAt: Date.now(),
+            });
         } catch {
-          /* Remaining questions keep dependent work paused. */
+          /* Keep the original checkpoint retryable if dispatch cannot be queued. */
         }
       }
+    }
     if (
       !ids.some((id) =>
         before.find(

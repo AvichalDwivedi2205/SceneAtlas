@@ -14,8 +14,10 @@ def sign(body: bytes, secret: str, timestamp: str) -> str:
 class Backend:
     def __init__(self, run_id: str, attempt: int):
         self.run_id, self.attempt = run_id, attempt
-        self.url = os.environ["CONVEX_SITE_URL"].rstrip("/")
-        self.secret = os.environ["AGENT_CALLBACK_SECRET"]
+        self.url = os.environ["CONVEX_SITE_URL"].strip().rstrip("/")
+        self.secret = os.environ["AGENT_CALLBACK_SECRET"].strip()
+        if not self.secret:
+            raise ValueError("Agent callback authentication is not configured.")
 
     async def post(self, operation: str, data: dict[str, Any] | None = None, binary: bool = False):
         payload = {"runId": self.run_id, "attempt": self.attempt, **(data or {})}

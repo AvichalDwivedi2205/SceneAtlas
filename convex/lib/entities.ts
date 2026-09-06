@@ -73,13 +73,35 @@ export async function putEntity(
     createdAt: now,
     createdBy: args.actor,
   });
+  // Reserve space only for a new card. Existing collaborator placements stay put.
+  const width = data.kind === "answer" ? 270 : 340;
+  const height = 480;
+  const occupied = await ctx.db
+    .query("nodes")
+    .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+    .collect();
+  const x = args.x ?? 0;
+  let y = args.y ?? 0;
+  for (let attempt = 0; attempt <= occupied.length; attempt++) {
+    const collisions = occupied.filter(
+      (node) =>
+        x < node.x + node.width + 60 &&
+        x + width + 60 > node.x &&
+        y < node.y + Math.max(node.height, height) + 60 &&
+        y + height + 60 > node.y,
+    );
+    if (!collisions.length) break;
+    y = Math.max(
+      ...collisions.map((node) => node.y + Math.max(node.height, height) + 60),
+    );
+  }
   await ctx.db.insert("nodes", {
     boardId: args.boardId,
     entityId: id,
-    x: args.x ?? 0,
-    y: args.y ?? 0,
-    width: data.kind === "answer" ? 270 : 340,
-    height: 240,
+    x,
+    y,
+    width,
+    height,
     geometryRevision: 1,
     manual: false,
   });

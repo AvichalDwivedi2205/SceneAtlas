@@ -4,16 +4,195 @@ import { useMutation, useQuery } from "convex/react";
 import { UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowUpRight, FileText, Plus, Search, Users, LoaderCircle } from "lucide-react";
+import {
+  ArrowUpRight,
+  FileText,
+  Plus,
+  Search,
+  Users,
+  LoaderCircle,
+} from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { AuthGate } from "../../components/auth-gate";
-export default function Page(){return <AuthGate><Workspaces/></AuthGate>;}
-function Workspaces(){
- const boards=useQuery(api.boards.list);const create=useMutation(api.boards.create);const router=useRouter();
- const [name,setName]=useState("");const [search,setSearch]=useState("");const [creating,setCreating]=useState(false);const [error,setError]=useState("");const [form,setForm]=useState(false);
- async function submit(e:React.FormEvent){e.preventDefault();setCreating(true);setError("");try{const id=await create({name});router.push(`/workspaces/${id}`);}catch(e){setError(e instanceof Error?e.message:"Could not create workspace.");setCreating(false);}}
- return <main className="workspace-page"><header className="workspace-header"><Link className="brand" href="/"><i/>SceneAtlas</Link><span className="crumb">Your productions</span><div className="spacer"/><UserButton/></header><div className="workspace-content"><span className="eyebrow">A CLEARER PICTURE, FROM THE START</span><div className="page-title-row"><div><h1>Production workspaces</h1><p>One screenplay. One shared place for every decision.</p></div><button className="button primary" onClick={()=>setForm(true)}><Plus size={16}/> New workspace</button></div><div className="list-controls"><span>All productions <span className="count">{boards?.filter(b=>!b.archived).length??"—"}</span></span><label className="search-input"><Search size={15}/><input placeholder="Find a production…" value={search} onChange={e=>setSearch(e.target.value)}/></label></div>
- {form&&<form className="glass new-workspace" onSubmit={submit}><FileText className="brass"/><div><h3>Name your production</h3><label className="sr-only" htmlFor="production-name">Production name</label><input id="production-name" autoFocus placeholder="e.g. Coastal short" value={name} maxLength={100} onChange={e=>setName(e.target.value)} required/></div><button className="button primary" disabled={creating}>{creating?<LoaderCircle size={16} className="spin"/>:"Create and open"}</button><button type="button" className="button quiet" onClick={()=>setForm(false)}>Cancel</button>{error&&<p className="error" role="alert">{error}</p>}</form>}
- {!boards?<div className="loading-block"><LoaderCircle className="spin"/> Loading your productions…</div>:<div className="workspace-grid">{boards.filter(b=>!b.archived&&b.name.toLowerCase().includes(search.toLowerCase())).map(b=><Link href={`/workspaces/${b._id}`} key={b._id} className="workspace-tile"><div className="tile-canvas"><div className="tiny-root"><FileText size={18}/></div><div className="tiny-line"/><div className="tiny-scenes"><span/><span/><span/></div><span className="tile-role"><Users size={12}/> {b.role}</span><ArrowUpRight className="tile-open" size={18}/></div><div className="tile-details"><h3>{b.name}</h3><p>{b.scenes?`${b.scenes} scenes` :"Ready for a screenplay"}<span className={`badge ${b.open?"clay-badge":"moss-badge"}`}>{b.open?`${b.open} open questions`:"Saved"}</span></p><small>Edited {new Date(b.updatedAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</small></div></Link>)}<button className="workspace-tile create-tile" onClick={()=>setForm(true)}><span><Plus size={24}/></span><h3>A new story starts here.</h3><p>Create a workspace</p></button></div>}
- <p className="workspace-foot"><Users size={14}/> Invite collaborators from inside a workspace. Your boards are private by default.</p></div></main>;
+import { WorkspaceSkeleton } from "../../components/loading-state";
+export default function Page() {
+  return (
+    <AuthGate>
+      <Workspaces />
+    </AuthGate>
+  );
+}
+function Workspaces() {
+  const boards = useQuery(api.boards.list);
+  const create = useMutation(api.boards.create);
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    setError("");
+    try {
+      const id = await create({ name });
+      router.push(`/workspaces/${id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create workspace.");
+      setCreating(false);
+    }
+  }
+  return (
+    <main className="workspace-page">
+      <header className="workspace-header">
+        <Link className="brand" href="/">
+          <i />
+          SceneAtlas
+        </Link>
+        <span className="crumb">Your productions</span>
+        <div className="spacer" />
+        <UserButton />
+      </header>
+      <div className="workspace-content">
+        <span className="eyebrow">A CLEARER PICTURE, FROM THE START</span>
+        <div className="page-title-row">
+          <div>
+            <h1>Production workspaces</h1>
+            <p>One screenplay. One shared place for every decision.</p>
+          </div>
+          <button className="button primary" onClick={() => setForm(true)}>
+            <Plus size={16} /> New workspace
+          </button>
+        </div>
+        <div className="list-controls">
+          <span>
+            All productions{" "}
+            <span className="count">
+              {boards?.filter((b) => !b.archived).length ?? "—"}
+            </span>
+          </span>
+          <label className="search-input">
+            <Search size={15} />
+            <input
+              placeholder="Find a production…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+        </div>
+        {form && (
+          <form className="glass new-workspace" onSubmit={submit}>
+            <FileText className="brass" />
+            <div>
+              <h3>Name your production</h3>
+              <label className="sr-only" htmlFor="production-name">
+                Production name
+              </label>
+              <input
+                id="production-name"
+                autoFocus
+                placeholder="e.g. Coastal short"
+                value={name}
+                maxLength={100}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            <button className="button primary" disabled={creating}>
+              {creating ? (
+                <>
+                  <LoaderCircle size={16} className="spin" /> Creating
+                  workspace…
+                </>
+              ) : (
+                "Create and open"
+              )}
+            </button>
+            <button
+              type="button"
+              className="button quiet"
+              onClick={() => setForm(false)}
+            >
+              Cancel
+            </button>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+          </form>
+        )}
+        {!boards ? (
+          <WorkspaceSkeleton />
+        ) : (
+          <div className="workspace-grid">
+            {boards
+              .filter(
+                (b) =>
+                  !b.archived &&
+                  b.name.toLowerCase().includes(search.toLowerCase()),
+              )
+              .map((b) => (
+                <Link
+                  href={`/workspaces/${b._id}`}
+                  key={b._id}
+                  className="workspace-tile"
+                >
+                  <div className="tile-canvas">
+                    <div className="tiny-root">
+                      <FileText size={18} />
+                    </div>
+                    <div className="tiny-line" />
+                    <div className="tiny-scenes">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                    <span className="tile-role">
+                      <Users size={12} /> {b.role}
+                    </span>
+                    <ArrowUpRight className="tile-open" size={18} />
+                  </div>
+                  <div className="tile-details">
+                    <h3>{b.name}</h3>
+                    <p>
+                      {b.scenes
+                        ? `${b.scenes} scenes`
+                        : "Ready for a screenplay"}
+                      <span
+                        className={`badge ${b.open ? "clay-badge" : "moss-badge"}`}
+                      >
+                        {b.open ? `${b.open} open questions` : "Saved"}
+                      </span>
+                    </p>
+                    <small>
+                      Edited{" "}
+                      {new Date(b.updatedAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </small>
+                  </div>
+                </Link>
+              ))}
+            <button
+              className="workspace-tile create-tile"
+              onClick={() => setForm(true)}
+            >
+              <span>
+                <Plus size={24} />
+              </span>
+              <h3>A new story starts here.</h3>
+              <p>Create a workspace</p>
+            </button>
+          </div>
+        )}
+        <p className="workspace-foot">
+          <Users size={14} /> Invite collaborators from inside a workspace. Your
+          boards are private by default.
+        </p>
+      </div>
+    </main>
+  );
 }

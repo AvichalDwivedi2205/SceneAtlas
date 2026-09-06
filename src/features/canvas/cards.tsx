@@ -21,6 +21,8 @@ import {
 import type { Entity, QuestionData } from "../../domain/model";
 import { formatMoney, summarizeCosts } from "../../domain/planning";
 import { useBoard } from "./board-context";
+import { AsyncButton } from "../../components/async-button";
+import { latestRun, RunState, TaskButton } from "./workflow-state";
 export type CardNode = Node<{ entity: Entity }, "card">;
 const icons = {
   script: FileText,
@@ -43,9 +45,11 @@ export function titleFor(entity: Entity): string {
     case "scene":
       return `Scene ${d.number} · ${d.setting}`;
     case "question":
-      return "A decision to make";
+      return d.resolution === "answered"
+        ? "Decision saved"
+        : "A decision to make";
     case "answer":
-      return d.original;
+      return "Saved production input";
     case "location":
       return d.name;
     case "cost":
@@ -80,11 +84,11 @@ export const ProductionCard = memo(function ProductionCard({
   const d = entity.data;
   const Icon = icons[d.kind];
   const editable = snapshot.role !== "viewer" && !previewMode;
-  const run = snapshot.runs.find(
-    (r) =>
-      r.targetId === entity._id &&
-      ["queued", "running", "waiting", "failed"].includes(r.status),
-  );
+  const latest = latestRun(snapshot.runs, undefined, entity._id);
+  const run =
+    latest && ["queued", "running", "waiting", "failed"].includes(latest.status)
+      ? latest
+      : undefined;
   const scriptScenes = snapshot.entities.filter((e) => e.data.kind === "scene");
   return (
     <article
@@ -102,7 +106,9 @@ export const ProductionCard = memo(function ProductionCard({
               : d.kind === "script"
                 ? "THE SCREENPLAY"
                 : d.kind === "question"
-                  ? "NEEDS YOUR ANSWER"
+                  ? d.resolution === "answered"
+                    ? "ANSWER SAVED"
+                    : "NEEDS YOUR ANSWER"
                   : d.kind.toUpperCase()}
           </span>
           <h3>{titleFor(entity)}</h3>
@@ -158,7 +164,9 @@ export const ProductionCard = memo(function ProductionCard({
                 ))}
               </div>
               {!scriptScenes.length && (
-                <button
+                <TaskButton
+                  kind={"scenes"}
+                  targetId={entity._id}
                   className="button primary nodrag"
                   disabled={!editable}
                   onClick={() =>
@@ -170,7 +178,7 @@ export const ProductionCard = memo(function ProductionCard({
                   }
                 >
                   <Sparkles size={14} /> Generate scenes
-                </button>
+                </TaskButton>
               )}
               <div className="node-footer">
                 <span className="dot brass" /> Shared production decisions start
@@ -202,7 +210,9 @@ export const ProductionCard = memo(function ProductionCard({
                 <strong>{d.candidateCount}</strong>
               </div>
               <div className="actions">
-                <button
+                <TaskButton
+                  kind={"research"}
+                  targetId={entity._id}
                   className="button primary small-button nodrag"
                   disabled={!editable}
                   onClick={() =>
@@ -219,7 +229,7 @@ export const ProductionCard = memo(function ProductionCard({
                   )
                     ? "Research again"
                     : "Find locations"}
-                </button>
+                </TaskButton>
                 <button
                   className="icon-button nodrag"
                   disabled={!editable}
@@ -276,7 +286,8 @@ export const ProductionCard = memo(function ProductionCard({
                       ? `Scene ${scene.data.number}`
                       : "Scene";
                   return (
-                    <button
+                    <AsyncButton
+                      pendingLabel="Saving selection…"
                       key={sceneId}
                       className={`button small-button nodrag ${selectedLocation ? "selected-choice" : "quiet"}`}
                       disabled={!editable || !activePlanId}
@@ -312,7 +323,7 @@ export const ProductionCard = memo(function ProductionCard({
                           "Select"
                         )}
                       </strong>
-                    </button>
+                    </AsyncButton>
                   );
                 })}
               </div>
@@ -382,7 +393,9 @@ export const ProductionCard = memo(function ProductionCard({
               </p>
               <PlanTotals planId={entity._id} />
               <div className="actions">
-                <button
+                <TaskButton
+                  kind={"schedule"}
+                  targetId={entity._id}
                   className="button small-button primary nodrag"
                   disabled={!editable}
                   onClick={() =>
@@ -392,7 +405,7 @@ export const ProductionCard = memo(function ProductionCard({
                   }
                 >
                   Plan schedule <ArrowUpRight size={13} />
-                </button>
+                </TaskButton>
                 <button
                   className="icon-button nodrag"
                   aria-label={`Edit ${d.name}`}
@@ -455,15 +468,21 @@ export const ProductionCard = memo(function ProductionCard({
         <div
           className={`node-status ${run?.status === "failed" ? "status-failed" : ""}`}
         >
-          <span className={`dot ${entity.stale ? "clay" : "brass"}`} />
-          {entity.stale ? "Needs refresh" : run?.activity}
+          {run ? (
+            <RunState run={run} compact />
+          ) : (
+            <>
+              <span className="dot clay" /> Needs refresh
+            </>
+          )}
           {run?.status === "failed" && editable && (
-            <button
+            <AsyncButton
+              pendingLabel="Retrying…"
               className="nodrag"
               onClick={() => act(() => actions.retry(run._id))}
             >
               Retry
-            </button>
+            </AsyncButton>
           )}
         </div>
       )}

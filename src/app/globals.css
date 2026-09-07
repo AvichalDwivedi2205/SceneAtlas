@@ -1064,15 +1064,20 @@ button:disabled {
   padding: 6px;
   align-items: center;
   gap: 4px;
+  max-width: calc(100% - 140px);
+  overflow-x: auto;
+  scrollbar-width: thin;
   backdrop-filter: blur(12px);
 }
 .scene-jump > span {
+  flex-shrink: 0;
   font-size: 8px;
   letter-spacing: 0.12em;
   color: var(--muted);
   padding: 0 7px;
 }
 .scene-jump button {
+  flex: 0 0 28px;
   width: 28px;
   height: 27px;
   border: 1px solid var(--line);

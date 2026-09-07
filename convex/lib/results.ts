@@ -68,6 +68,10 @@ export async function publishResult(
         .unique()
     )?._id;
   const sceneIds = new Map<number, Id<"entities">>();
+  const sceneColumns =
+    result.scenes.length > 12
+      ? Math.ceil(Math.sqrt(result.scenes.length))
+      : Math.max(1, result.scenes.length);
   if (result.scenes.length && run.kind !== "scenes")
     throw new ConvexError("Unexpected scene generation.");
   for (const [index, data] of result.scenes.entries()) {
@@ -81,8 +85,8 @@ export async function publishResult(
       ownerId: scriptId,
       logicalKey: `scene:${data.number}`,
       actor,
-      x: index * 780,
-      y: 650,
+      x: (index % sceneColumns) * 780,
+      y: 650 + Math.floor(index / sceneColumns) * 900,
     });
     await ctx.db.patch(id, { scope: { kind: "scene", sceneId: id } });
     sceneIds.set(data.number, id);
@@ -118,7 +122,10 @@ export async function publishResult(
         logicalKey: `plan:${i}`,
         actor,
         x: i * 780,
-        y: 1750,
+        y:
+          result.scenes.length > 12
+            ? 850 + Math.ceil(result.scenes.length / sceneColumns) * 900
+            : 1750,
       });
       await ctx.db.patch(id, { scope: { kind: "plan", planId: id } });
       for (const scene of allScenes)

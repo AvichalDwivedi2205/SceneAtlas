@@ -173,11 +173,12 @@ function BoardInterior({
   }, [notice]);
   useEffect(() => {
     const byId = new Map(snapshot.entities.map((e) => [e._id, e]));
-    setNodes((current) =>
-      snapshot.nodes.flatMap((n) => {
+    setNodes((current) => {
+      const currentById = new Map(current.map((n) => [n.id, n]));
+      return snapshot.nodes.flatMap((n) => {
         const entity = byId.get(n.entityId);
         if (!entity) return [];
-        const old = current.find((c) => c.id === n.entityId);
+        const old = currentById.get(n.entityId);
         return [
           {
             id: n.entityId,
@@ -188,13 +189,14 @@ function BoardInterior({
                 ? old.position
                 : { x: n.x, y: n.y },
             width: n.width,
+            initialHeight: n.height,
             selected: old?.selected ?? false,
             draggable: editable,
             selectable: true,
           },
         ];
-      }),
-    );
+      });
+    });
   }, [snapshot.nodes, snapshot.entities, editable]);
   const viewportKey = `sceneatlas:viewport:${snapshot.board._id}:${snapshot.me._id}`;
   useEffect(() => {
@@ -601,6 +603,7 @@ function BoardInterior({
             >
               <ReactFlow<CardNode>
                 nodes={nodes}
+                onlyRenderVisibleElements={nodes.length > 80}
                 edges={edges}
                 nodeTypes={nodeTypes}
                 onNodesChange={onNodesChange}
@@ -664,7 +667,7 @@ function BoardInterior({
                 }
                 nodesConnectable={false}
                 deleteKeyCode={null}
-                minZoom={0.12}
+                minZoom={0.025}
                 maxZoom={1.5}
                 fitView
                 fitViewOptions={{ padding: 0.18, maxZoom: 0.8 }}
@@ -777,7 +780,7 @@ function BoardInterior({
                 </div>
               )}
               {scenes.length > 0 && (
-                <div className="scene-jump">
+                <nav className="scene-jump" aria-label="Scene navigation">
                   <span>SCENES</span>
                   {scenes.map((s) => (
                     <button
@@ -790,7 +793,7 @@ function BoardInterior({
                         : ""}
                     </button>
                   ))}
-                </div>
+                </nav>
               )}
             </div>
             {view === "schedule" && <SchedulePanel />}
@@ -1154,7 +1157,9 @@ function BoardInterior({
                   >
                     <Upload size={25} />
                     <strong>Drop your screenplay here</strong>
-                    <span>or choose a PDF / text file · up to 50 MB</span>
+                    <span>
+                      PDF with selectable text / text file · up to 50 MB
+                    </span>
                   </button>
                   <div className="or-divider">or paste screenplay text</div>
                   <form

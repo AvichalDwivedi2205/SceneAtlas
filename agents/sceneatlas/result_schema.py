@@ -6,6 +6,21 @@ from pathlib import Path
 CONTRACT = json.loads(Path(__file__).with_name("entity.schema.json").read_text())
 ENTITIES = {schema["properties"]["kind"]["const"]: schema for schema in CONTRACT["oneOf"]}
 
+def breakdown_schema() -> dict:
+    return {"type": "object", "additionalProperties": False, "required": ["segments"], "properties": {
+        "segments": {"type": "array", "minItems": 1, "maxItems": 6, "items": {
+            "type": "object", "additionalProperties": False,
+            "required": ["number", "part", "setting", "interiorExterior", "timeOfDay", "needs"],
+            "properties": {
+                "number": {"type": "integer", "minimum": 1}, "part": {"type": "integer", "minimum": 1},
+                "setting": {"type": "string", "maxLength": 300},
+                "interiorExterior": {"type": "string", "enum": ["INT", "EXT", "INT/EXT", "UNKNOWN"]},
+                "timeOfDay": {"type": "string", "maxLength": 100},
+                "needs": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 200}},
+            },
+        }},
+    }}
+
 def generation_shape(schema: dict) -> dict:
     """Keep structure small enough for Gemini; validate all domain bounds afterward."""
     result = {key: value for key, value in schema.items() if key in {"type", "enum", "const", "required", "additionalProperties"}}

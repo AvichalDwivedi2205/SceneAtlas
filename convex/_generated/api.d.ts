@@ -23,6 +23,7 @@ import type * as members from "../members.js";
 import type * as planning from "../planning.js";
 import type * as presence from "../presence.js";
 import type * as runs from "../runs.js";
+import type * as screenplay from "../screenplay.js";
 
 import type {
   ApiFromModules,
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   planning: typeof planning;
   presence: typeof presence;
   runs: typeof runs;
+  screenplay: typeof screenplay;
 }>;
 
 /**

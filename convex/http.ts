@@ -19,6 +19,8 @@ http.route({pathPrefix:"/agent/",method:"POST",handler:httpAction(async(ctx,requ
     if(operation==="claim")return Response.json(await ctx.runMutation(internal.runs.claim,body));
     if(operation==="context")return Response.json(await ctx.runQuery(internal.runs.context,body));
     if(operation==="event")return Response.json(await ctx.runMutation(internal.runs.event,body));
+    if(operation==="sceneBatch")return Response.json(await ctx.runQuery(internal.screenplay.batch,body));
+    if(operation==="saveSceneBatch")return Response.json(await ctx.runMutation(internal.screenplay.saveBatch,body));
     if(operation==="asset"){
       const asset=await ctx.runQuery(internal.assets.forRun,body);const blob=await ctx.storage.get(asset.storageId);if(!blob)return new Response("File not found",{status:404});
       return new Response(blob,{headers:{"Content-Type":asset.mime,"Cache-Control":"no-store"}});

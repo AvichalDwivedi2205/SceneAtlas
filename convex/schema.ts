@@ -25,6 +25,12 @@ export const runStatus = v.union(
   v.literal("superseded"),
 );
 export default defineSchema({
+  sceneBatches: defineTable({
+    boardId: v.id("boards"),
+    key: v.string(),
+    result: v.any(),
+    createdAt: v.number(),
+  }).index("by_board_key", ["boardId", "key"]),
   users: defineTable({
     tokenIdentifier: v.string(),
     subject: v.string(),

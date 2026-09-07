@@ -354,7 +354,12 @@ export const event = internalMutation({
         await publishResult(ctx, run, publishable);
         await ctx.db.patch(run._id, {
           status: args.status === "waiting" ? "waiting" : "complete",
-          output: result,
+          // Scene content already has versioned canonical records. Keep run history
+          // small so a feature-length screenplay cannot exceed one document's budget.
+          output:
+            run.kind === "scenes" && args.status === "complete"
+              ? { message: result.message, sceneCount: result.scenes.length }
+              : result,
         });
       }
     }

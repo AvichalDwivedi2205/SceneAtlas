@@ -9,6 +9,7 @@ import os
 import re
 import time
 from contextlib import aclosing, suppress
+from functools import lru_cache
 from typing import Any
 
 import google.auth.transport.requests
@@ -17,7 +18,6 @@ from google.cloud import tasks_v2
 from google.oauth2 import id_token
 from pydantic import BaseModel, ConfigDict, Field
 import vertexai
-from vertexai import agent_engines
 
 from sceneatlas.backend import Backend
 
@@ -137,6 +137,15 @@ async def with_heartbeats(stream, interval=30):
             await iterator.aclose()
 
 
+@lru_cache(maxsize=1)
+def managed_engine(project: str, location: str, resource: str):
+    # The legacy agent_engines async wrapper iterates a synchronous HTTP stream.
+    # The Client wrapper uses async_request_streamed and leaves heartbeats and
+    # concurrent Cloud Tasks free to run. Metadata lookup stays off the loop.
+    client = vertexai.Client(project=project, location=location, http_options={"timeout": 1_500_000})
+    return client.agent_engines.get(name=resource)
+
+
 async def execute(payload: Dispatch) -> None:
     backend = Backend(payload.runId, payload.attempt)
     claimed = await backend.post("claim")
@@ -148,10 +157,9 @@ async def execute(payload: Dispatch) -> None:
     try:
         project = _required("GOOGLE_CLOUD_PROJECT")
         location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-        vertexai.init(project=project, location=location)
         context = await backend.post("context")
         run_kind = context["run"]["kind"]
-        remote = agent_engines.get(_required("AGENT_RUNTIME_RESOURCE"))
+        remote = await asyncio.to_thread(managed_engine, project, location, _required("AGENT_RUNTIME_RESOURCE"))
         stream = remote.async_stream_query(
             user_id=f"run-{payload.runId}"[:128],
             message=json.dumps({"runId": payload.runId, "attempt": payload.attempt}),
@@ -190,7 +198,8 @@ async def execute(payload: Dispatch) -> None:
         await backend.post("event", {"sequence": sequence, "activity": "Waiting for your answer" if waiting else "Complete", "status": "waiting" if waiting else "complete", "result": final})
     except Exception as exc:
         sequence += 1
-        await backend.post("event", {"sequence": sequence, "activity": "Agent task failed", "status": "failed", "detail": ("Worker reached its time limit. Retry resumes saved screenplay batches." if isinstance(exc, TimeoutError) else str(exc))[:4000]})
+        detail = str(exc).strip() or f"Managed agent failed ({type(exc).__name__}). Retry resumes any saved screenplay batches."
+        await backend.post("event", {"sequence": sequence, "activity": "Agent task failed", "status": "failed", "detail": ("Worker reached its time limit. Retry resumes saved screenplay batches." if isinstance(exc, TimeoutError) else detail)[:4000]})
 
 
 @app.get("/health")

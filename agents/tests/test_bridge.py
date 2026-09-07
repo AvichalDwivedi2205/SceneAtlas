@@ -3,6 +3,7 @@ import hmac
 import json
 import time
 import asyncio
+import httpx
 import pytest
 from contextlib import aclosing
 
@@ -52,7 +53,8 @@ def test_extracts_only_structured_final_result():
     assert main._result(event) == {"message": "done"}
 
 
-def test_progress_without_search_id_omits_optional_callback_field(monkeypatch):
+@pytest.mark.parametrize("remote_failure", [None, httpx.ReadTimeout("")])
+def test_progress_without_search_id_omits_optional_callback_field(monkeypatch, remote_failure):
     sent = []
 
     class Backend:
@@ -70,17 +72,38 @@ def test_progress_without_search_id_omits_optional_callback_field(monkeypatch):
     class Remote:
         async def async_stream_query(self, **kwargs):
             yield {"actions": {"state_delta": {"activity": "Reading screenplay"}}}
+            if remote_failure:
+                raise remote_failure
             yield {"content": {"parts": [{"text": json.dumps({"sceneatlasResult": {"message": "done"}})}]}}
 
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
     monkeypatch.setenv("AGENT_RUNTIME_RESOURCE", "test-runtime")
     monkeypatch.setattr(main, "Backend", Backend)
-    monkeypatch.setattr(main.vertexai, "init", lambda **kwargs: None)
-    monkeypatch.setattr(main.agent_engines, "get", lambda resource: Remote())
-    asyncio.run(main.execute(main.Dispatch(runId="run-12345", attempt=1, callbackUrl="https://example.convex.site")))
+    loading = False
+    ticked_while_loading = []
+    def load_engine(*_):
+        nonlocal loading
+        loading = True
+        time.sleep(0.04)
+        loading = False
+        return Remote()
+    monkeypatch.setattr(main, "managed_engine", load_engine)
+    async def check_responsiveness():
+        while not loading:
+            await asyncio.sleep(0.001)
+        ticked_while_loading.append(True)
+    async def run():
+        await asyncio.wait_for(asyncio.gather(
+            main.execute(main.Dispatch(runId="run-12345", attempt=1, callbackUrl="https://example.convex.site")),
+            check_responsiveness(),
+        ), timeout=1)
+    asyncio.run(run())
+    assert ticked_while_loading == [True]
     progress = next(item for item in sent if item["activity"] == "Reading screenplay")
     assert "providerId" not in progress
-    assert sent[-1]["status"] == "complete"
+    assert sent[-1]["status"] == ("failed" if remote_failure else "complete")
+    if remote_failure:
+        assert "ReadTimeout" in sent[-1]["detail"]
 
 
 @pytest.mark.asyncio

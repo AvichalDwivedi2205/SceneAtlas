@@ -191,6 +191,18 @@ class SceneAtlasAgent(BaseAgent):
         kind=task["run"]["kind"]
         if kind not in STAGES:
             raise ValueError("Unknown workflow stage.")
+        schedule = task.get("schedule")
+        if kind == "schedule" and schedule and schedule["entries"] and not schedule["conflicts"]:
+            # The planner already applied the confirmed dates, windows, moves
+            # and setup times. A model must not add another approval gate to a
+            # complete provisional result or change its calculated rows.
+            jsonschema.validate(schedule, CONTRACT)
+            yield Event(invocation_id=ctx.invocation_id, author=self.name,
+                actions=EventActions(state_delta={"activity": "Planning schedule"}))
+            result = {"schedule": schedule, "message": schedule["explanation"]}
+            yield Event(invocation_id=ctx.invocation_id, author=self.name,
+                content=types.Content(role="model", parts=[types.Part(text=json.dumps({"sceneatlasResult": result}))]))
+            return
         pages=None
         if kind in {"ingest","scenes"}:
             yield Event(invocation_id=ctx.invocation_id, author=self.name, actions=EventActions(state_delta={"activity":"Reading screenplay"}))

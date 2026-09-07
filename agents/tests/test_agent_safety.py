@@ -117,6 +117,40 @@ def test_specialist_request_does_not_inherit_earlier_batch_drafts():
     assert len(request.contents) == 1 and request.contents[0].role == "user"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("conflicts", [[], ["Confirm shooting dates."]])
+async def test_complete_calculated_schedule_does_not_reask_confirmed_inputs(monkeypatch, conflicts):
+    import json
+    from types import SimpleNamespace
+    from google.genai import types
+    from google.adk.events import Event
+    from sceneatlas import agent
+    schedule = {"kind": "schedule", "planId": "plan", "entries": [] if conflicts else [{
+        "sceneId": "scene", "sceneNumber": 1, "locationId": "location", "locationName": "Illustrative beach",
+        "date": "2026-11-16", "start": 555, "end": 615, "durationBasis": "estimate", "reason": "Fits confirmed window."}],
+        "conflicts": conflicts, "provisional": True, "moves": 0, "days": 0 if conflicts else 1,
+        "explanation": "Proposed order. Location availability and permission remain unverified."}
+    class FakeBackend:
+        def __init__(self, *_): pass
+        async def post(self, operation):
+            assert operation == "context"
+            return {"run": {"_id": "run", "kind": "schedule", "targetId": "plan"}, "schedule": schedule, "entities": []}
+    calls = []
+    async def generate(self, ctx):
+        calls.append(self.name)
+        yield Event(author=self.name, invocation_id=ctx.invocation_id,
+            content=types.Content(role="model", parts=[types.Part(text='{"message":"Review the missing production inputs.","questions":[]}')]))
+    monkeypatch.setattr(agent, "Backend", FakeBackend)
+    monkeypatch.setattr(agent.LlmAgent, "run_async", generate)
+    ctx = SimpleNamespace(invocation_id="schedule-test", session=SimpleNamespace(state={}),
+        user_content=types.Content(parts=[types.Part(text='{"runId":"run","attempt":1}')]))
+    events = [e async for e in agent.SceneAtlasAgent()._run_async_impl(ctx)]
+    result = json.loads(events[-1].content.parts[0].text)["sceneatlasResult"]
+    assert result["schedule"]["entries"] == schedule["entries"]
+    assert result["schedule"]["provisional"] is True
+    assert calls == (["schedule_specialist"] if conflicts else [])
+
+
 def test_research_requires_real_production_area_on_legacy_boards():
     from sceneatlas.agent import missing_intake
     assert missing_intake({"entities": []}, "research")[0]["data"]["key"] == "search_area"

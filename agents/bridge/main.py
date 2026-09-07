@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time
+from contextlib import aclosing, suppress
 from typing import Any
 
 import google.auth.transport.requests
@@ -112,6 +113,30 @@ def _result(event: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+async def with_heartbeats(stream, interval=30):
+    """Keep a pending remote read alive across heartbeat ticks; cancel on exit."""
+    iterator = stream.__aiter__()
+    pending = asyncio.create_task(anext(iterator))
+    try:
+        while True:
+            done, _ = await asyncio.wait({pending}, timeout=interval)
+            if not done:
+                yield None
+                continue
+            try:
+                event = pending.result()
+            except StopAsyncIteration:
+                break
+            yield event
+            pending = asyncio.create_task(anext(iterator))
+    finally:
+        pending.cancel()
+        with suppress(asyncio.CancelledError, StopAsyncIteration):
+            await pending
+        if hasattr(iterator, "aclose"):
+            await iterator.aclose()
+
+
 async def execute(payload: Dispatch) -> None:
     backend = Backend(payload.runId, payload.attempt)
     claimed = await backend.post("claim")
@@ -127,26 +152,37 @@ async def execute(payload: Dispatch) -> None:
         context = await backend.post("context")
         run_kind = context["run"]["kind"]
         remote = agent_engines.get(_required("AGENT_RUNTIME_RESOURCE"))
-        async for event in remote.async_stream_query(
+        stream = remote.async_stream_query(
             user_id=f"run-{payload.runId}"[:128],
             message=json.dumps({"runId": payload.runId, "attempt": payload.attempt}),
-        ):
-            if not isinstance(event, dict):
-                continue
-            if event.get("errorMessage"):
-                raise RuntimeError(str(event["errorMessage"])[:4000])
-            activity, provider_id = _activity(event)
-            result = _result(event)
-            if result is not None:
-                final = result
-            if activity:
-                sequence += 1
-                progress = {"sequence": sequence, "activity": activity}
-                if provider_id:
-                    progress["providerId"] = provider_id
-                accepted = await backend.post("event", progress)
-                if accepted.get("accepted") is False:
-                    return
+        )
+        last_activity = "Starting managed agent"
+        # Leave time to save a useful failure before the Cloud Tasks 30-minute deadline.
+        async with asyncio.timeout(1500), aclosing(with_heartbeats(stream)) as events:
+            async for event in events:
+                if event is None:
+                    sequence += 1
+                    accepted = await backend.post("event", {"sequence": sequence, "activity": last_activity})
+                    if accepted.get("accepted") is False:
+                        return
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                if event.get("errorMessage"):
+                    raise RuntimeError(str(event["errorMessage"])[:4000])
+                activity, provider_id = _activity(event)
+                result = _result(event)
+                if result is not None:
+                    final = result
+                if activity:
+                    last_activity = activity
+                    sequence += 1
+                    progress = {"sequence": sequence, "activity": activity}
+                    if provider_id:
+                        progress["providerId"] = provider_id
+                    accepted = await backend.post("event", progress)
+                    if accepted.get("accepted") is False:
+                        return
         if final is None:
             raise RuntimeError("Managed agent completed without a validated SceneAtlas result")
         sequence += 1
@@ -154,7 +190,7 @@ async def execute(payload: Dispatch) -> None:
         await backend.post("event", {"sequence": sequence, "activity": "Waiting for your answer" if waiting else "Complete", "status": "waiting" if waiting else "complete", "result": final})
     except Exception as exc:
         sequence += 1
-        await backend.post("event", {"sequence": sequence, "activity": "Agent task failed", "status": "failed", "detail": str(exc)[:4000]})
+        await backend.post("event", {"sequence": sequence, "activity": "Agent task failed", "status": "failed", "detail": ("Worker reached its time limit. Retry resumes saved screenplay batches." if isinstance(exc, TimeoutError) else str(exc))[:4000]})
 
 
 @app.get("/health")

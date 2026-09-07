@@ -3,6 +3,8 @@ import hmac
 import json
 import time
 import asyncio
+import pytest
+from contextlib import aclosing
 
 from fastapi.testclient import TestClient
 
@@ -79,3 +81,24 @@ def test_progress_without_search_id_omits_optional_callback_field(monkeypatch):
     progress = next(item for item in sent if item["activity"] == "Reading screenplay")
     assert "providerId" not in progress
     assert sent[-1]["status"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_does_not_cancel_slow_provider_and_closes_on_cancellation():
+    closed = []
+    async def remote():
+        try:
+            await asyncio.sleep(0.035)
+            yield {"result": "event after several ticks"}
+            await asyncio.sleep(60)
+        finally:
+            closed.append(True)
+    async with aclosing(main.with_heartbeats(remote(), interval=0.01)) as stream:
+        events = []
+        async for event in stream:
+            events.append(event)
+            if event is not None:
+                break
+    assert events.count(None) >= 2
+    assert events[-1] == {"result": "event after several ticks"}
+    assert closed == [True]

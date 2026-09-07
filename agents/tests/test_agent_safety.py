@@ -105,6 +105,18 @@ def test_scene_generation_retains_card_text_limits():
     assert segment["timeOfDay"]["maxLength"] == 100
 
 
+def test_specialist_request_does_not_inherit_earlier_batch_drafts():
+    from google.adk.models.llm_request import LlmRequest
+    from google.genai import types
+    from sceneatlas.agent import isolate_model_input
+    request = LlmRequest(contents=[types.Content(role="model", parts=[types.Part(text="EARLIER_BATCH_DRAFT")])],
+        config=types.GenerateContentConfig(system_instruction="Authoritative current batch and validation feedback"))
+    isolate_model_input(None, request)
+    assert "EARLIER_BATCH_DRAFT" not in request.model_dump_json()
+    assert request.config.system_instruction == "Authoritative current batch and validation feedback"
+    assert len(request.contents) == 1 and request.contents[0].role == "user"
+
+
 def test_research_requires_real_production_area_on_legacy_boards():
     from sceneatlas.agent import missing_intake
     assert missing_intake({"entities": []}, "research")[0]["data"]["key"] == "search_area"

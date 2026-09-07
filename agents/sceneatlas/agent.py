@@ -77,12 +77,24 @@ Infer setting, INT/EXT and time from the heading. Needs describe only physical s
 in this segment (architecture, landscape, props, weather, story action). Do not infer real crew,
 equipment, permits, costs, shooting durations or producer decisions. Unknown details stay unknown.
 A long scene may span several parts; review all text in the supplied part. Return at most 20
-unique needs per segment, each at most 200 characters. Group related features instead of
-listing each gesture or facial expression. Follow the supplied enrichmentSchema bounds.
+unique needs per segment, each at most 200 characters. Prefer 3–8 short noun phrases,
+each under 80 characters: physical places, landscape, props, weather and visible activity.
+Do not narrate the plot, list each character's gestures, or repeat phrases.
+Follow the supplied enrichmentSchema bounds.
 If validationFeedback is present, regenerate the complete response from the same source,
 correcting that validation problem without changing segment identity or inventing details.
 CONTEXT:\n""" + json.dumps(task, ensure_ascii=False)
     return SYSTEM + "\nTASK: " + STAGES[task["run"]["kind"]] + "\nCONTEXT:\n" + json.dumps(task, ensure_ascii=False)
+
+def isolate_model_input(callback_context, llm_request):
+    """Each specialist call reads the authoritative context in its instruction.
+
+    ADK include_contents='none' still includes earlier events from this turn.
+    Repeated screenplay batches must not inherit earlier generated drafts.
+    """
+    llm_request.contents = [types.Content(role="user", parts=[types.Part(
+        text="Complete the current task using only the supplied instruction and context. Return the required JSON."
+    )])]
 
 def intake_question(key: str, prompt: str, reason: str, blocks: list[str]) -> dict:
     return {"data": {"kind": "question", "key": key, "prompt": prompt, "reason": reason,
@@ -125,6 +137,7 @@ class SceneAtlasAgent(BaseAgent):
         scene_shape = breakdown_schema()
         specialists=[LlmAgent(name=f"{kind}_specialist", model=os.environ.get("GEMINI_MODEL","gemini-2.5-flash"),
                     instruction=instruction, output_key="draft_result", include_contents="none",
+                    before_model_callback=isolate_model_input,
                     disallow_transfer_to_parent=True, disallow_transfer_to_peers=True,
                     generate_content_config=types.GenerateContentConfig(temperature=0.15, max_output_tokens=12000 if kind == "scenes" else 24000,
                         thinking_config=types.ThinkingConfig(thinking_budget=1024),
@@ -138,11 +151,12 @@ class SceneAtlasAgent(BaseAgent):
         try:
             for attempt in range(1, 4):
                 text = ""
-                async for event in specialist.run_async(ctx):
-                    if event.is_final_response() and event.content:
-                        text = "".join(p.text or "" for p in event.content.parts or [])
-                    yield event
                 try:
+                    async for event in specialist.run_async(ctx):
+                        if event.is_final_response() and event.content:
+                            text = "".join(p.text or "" for p in event.content.parts or [])
+                        # Only validated SceneAtlas results cross the worker
+                        # stream. Raw drafts may be malformed or very large.
                     result_box["value"] = decode(text)
                     return
                 except (jsonschema.ValidationError, ValueError) as error:

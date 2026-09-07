@@ -7,6 +7,7 @@ out/
 .playwright-mcp/
 playwright-report/
 test-results/
+artifacts/demo-video/
 coverage/
 agents/.venv/
 __pycache__/

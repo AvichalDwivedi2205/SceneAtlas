@@ -39,6 +39,37 @@ def enrichment(batch):
                           "interiorExterior": "INT", "timeOfDay": "DAY", "needs": ["Paper maps"]} for s in batch]}
 
 
+@pytest.mark.asyncio
+async def test_overlong_model_needs_are_repaired_before_batch_is_saved(monkeypatch):
+    pages = [{"page": 1, "text": "INT. ARCHIVE - DAY\nMara examines a wall of maps."}]
+    task = {"run": {"kind": "scenes", "targetId": "script"}, "entities": [{"kind": "question", "data": {
+        "key": "scene_scope", "answer": "Entire screenplay", "resolution": "answered", "blocks": ["scenes"]}}]}
+    saved, calls = [], []
+
+    class Backend:
+        async def post(self, operation, data):
+            if operation == "sceneBatch":
+                return None
+            saved.append(data["result"])
+
+    async def model(self, ctx):
+        context = ctx.session.state["task_context"]
+        calls.append(context.get("validationFeedback"))
+        result = enrichment(context["sceneSegments"])
+        if len(calls) == 1:
+            result["segments"][0]["needs"] = [f"Visible detail {n}" for n in range(21)]
+        yield Event(invocation_id=ctx.invocation_id, author=self.name, content=types.Content(role="model", parts=[types.Part(text=json.dumps(result))]))
+
+    monkeypatch.setattr(LlmAgent, "run_async", model)
+    ctx = SimpleNamespace(invocation_id="repair-test", session=SimpleNamespace(state={}))
+    events = [event async for event in SceneAtlasAgent()._screenplay(ctx, Backend(), task, pages)]
+    result = json.loads(events[-1].content.parts[0].text)["sceneatlasResult"]
+    assert len(calls) == 2 and calls[1]
+    assert len(saved) == 1 and saved[0]["segments"][0]["needs"] == ["Paper maps"]
+    assert result["scenes"][0]["heading"] == "INT. ARCHIVE - DAY"
+    assert "validationFeedback" not in ctx.session.state["task_context"]
+
+
 def test_numbered_slugs_continuations_and_exact_page_seams():
     pages = [
         {"page": 1, "text": "TITLE PAGE"},

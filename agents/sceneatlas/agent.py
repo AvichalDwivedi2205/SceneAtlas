@@ -43,9 +43,11 @@ Use only confirmed answers for production choices. Fictional action is not confi
 Never invent locations, sources, fees, availability, approval, shooting duration or operational constraints. Preserve unknowns.
 Each published or quoted cost must include its own source object citing an observed URL. Location-level sources do not replace item-level cost evidence. Omit numeric fees when that evidence is missing.
 Published fees must use the applicable location/district's exact rate and supported quantities. Midpoints of price ranges, assumed vehicles, staffing or other modeled quantities are estimates with explicit assumptions. Do not infer parking vehicle counts from crew size. An official-domain source for another park does not establish this location's fees or forms.
+Every cost quantity must be strictly positive. Omit non-applicable charges instead of representing them with quantity zero. Missing amounts remain unknown; never invent quantities or prices to satisfy validation.
 Questions belong to their script/scene/plan owner. Ask at most three focused related questions per owner. Reuse existing valid answers.
 Questions ask for producer decisions or production facts they own. Do not ask the producer to research public fees, verify a location feature, or promise external permission. Record missing public evidence as unknown costs or unresolved requirements; omit unsuitable candidates. For a conflict, ask which production constraint they want to change.
 Return only JSON matching Draft. Each entity data object must match the supplied entity schema, including its kind discriminator.
+If validationFeedback is present, regenerate the complete response to correct that schema or evidence problem using the same confirmed inputs and observed sources. Never relax the evidence requirements to make a response validate.
 questions entries are {ownerId?: string, sceneNumber?: number, data: question entity}. SceneNumber refers to a newly generated scene.
 All new questions have answer=null, resolution='open', rule=null. Production decisions require producer confirmation.
 Only propose edits to supplied allowed record IDs. Never edit sourced evidence. Material revisions use proposals, never direct changes.
@@ -73,7 +75,11 @@ Copy each supplied number and part exactly once; do not merge, skip, renumber or
 Infer setting, INT/EXT and time from the heading. Needs describe only physical story features visible
 in this segment (architecture, landscape, props, weather, story action). Do not infer real crew,
 equipment, permits, costs, shooting durations or producer decisions. Unknown details stay unknown.
-A long scene may span several parts; review all text in the supplied part. Keep needs concise.
+A long scene may span several parts; review all text in the supplied part. Return at most 20
+unique needs per segment, each at most 200 characters. Group related features instead of
+listing each gesture or facial expression. Follow the supplied enrichmentSchema bounds.
+If validationFeedback is present, regenerate the complete response from the same source,
+correcting that validation problem without changing segment identity or inventing details.
 CONTEXT:\n""" + json.dumps(task, ensure_ascii=False)
     return SYSTEM + "\nTASK: " + STAGES[task["run"]["kind"]] + "\nCONTEXT:\n" + json.dumps(task, ensure_ascii=False)
 
@@ -121,6 +127,36 @@ class SceneAtlasAgent(BaseAgent):
                         response_mime_type="application/json", response_json_schema=generation_shape(breakdown_schema()) if kind == "scenes" else workflow_schema(kind)))
                     for kind in STAGES]
         super().__init__(name="sceneatlas", sub_agents=specialists)
+
+    async def _generate_checked(self, ctx, specialist, decode, result_box):
+        """Repair bounded model drafts without repeating search or publishing invalid data."""
+        task = ctx.session.state["task_context"]
+        try:
+            for attempt in range(1, 4):
+                text = ""
+                async for event in specialist.run_async(ctx):
+                    if event.is_final_response() and event.content:
+                        text = "".join(p.text or "" for p in event.content.parts or [])
+                    yield event
+                try:
+                    result_box["value"] = decode(text)
+                    return
+                except (jsonschema.ValidationError, ValueError) as error:
+                    if isinstance(error, jsonschema.ValidationError):
+                        bound = json.dumps(error.validator_value) if isinstance(error.validator_value, (str, int, float, bool)) else "the supplied schema"
+                        problem = f"/{'/'.join(map(str, error.absolute_path))}: {error.validator} must satisfy {bound}"
+                    elif isinstance(error, json.JSONDecodeError):
+                        problem = "Response must be complete valid JSON."
+                    else:
+                        problem = "Response did not satisfy the supplied entity schema, source identity, or observed evidence."
+                    if attempt == 3:
+                        raise ValueError(f"Model output remained invalid after three attempts. {problem}") from error
+                    task["validationFeedback"] = {"attempt": attempt + 1, "problem": problem,
+                        "instruction": "Regenerate the complete JSON response using the original source and evidence. Correct validation only; never fabricate facts, quantities, source URLs or production decisions."}
+                    yield Event(invocation_id=ctx.invocation_id, author=self.name,
+                        actions=EventActions(state_delta={"activity": f"Checking generated details again · attempt {attempt + 1} / 3"}))
+        finally:
+            task.pop("validationFeedback", None)
 
     async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         message = ctx.user_content
@@ -182,22 +218,23 @@ class SceneAtlasAgent(BaseAgent):
         ctx.session.state["task_context"]=task
         yield Event(invocation_id=ctx.invocation_id, author=self.name,actions=EventActions(state_delta={"activity":{"ingest":"Identifying clarification needs","scenes":"Generating scenes","schedule":"Planning schedule","packet":"Preparing packet"}.get(kind,"Reviewing evidence")}))
         specialist=next(a for a in self.sub_agents if a.name==f"{kind}_specialist")
-        text=""
-        async for event in specialist.run_async(ctx):
-            if event.is_final_response() and event.content:
-                text="".join(p.text or "" for p in event.content.parts or [])
+        def decode(text):
+            result=Draft.model_validate_json(text).model_dump(exclude_none=True)
+            for question in result.get("questions", []):
+                question["ownerId"]=task["run"].get("targetId")
+                question.pop("sceneNumber",None)
+            if kind in {"research","requirements"}:
+                target=next(e for e in task["entities"] if e["_id"]==task["run"]["targetId"])
+                result=normalize_sources(result,evidence,target["data"] if kind=="requirements" else None)
+                if kind=="research":
+                    result["locations"]=result["locations"][:target["data"]["candidateCount"]]
+                    for location in result["locations"]: location["sceneIds"]=[target["_id"]]
+            validate_draft(result,pages)
+            return result
+        checked = {}
+        async for event in self._generate_checked(ctx, specialist, decode, checked):
             yield event
-        result=Draft.model_validate_json(text).model_dump(exclude_none=True)
-        for question in result.get("questions", []):
-            question["ownerId"]=task["run"].get("targetId")
-            question.pop("sceneNumber",None)
-        if kind in {"research","requirements"}:
-            target=next(e for e in task["entities"] if e["_id"]==task["run"]["targetId"])
-            result=normalize_sources(result,evidence,target["data"] if kind=="requirements" else None)
-            if kind=="research":
-                result["locations"]=result["locations"][:target["data"]["candidateCount"]]
-                for location in result["locations"]: location["sceneIds"]=[target["_id"]]
-        validate_draft(result,pages)
+        result = checked["value"]
         if kind=="schedule":
             result["schedule"]={**task["schedule"],"explanation":result["message"] or task["schedule"]["explanation"]}
         if kind=="packet":
@@ -252,14 +289,15 @@ class SceneAtlasAgent(BaseAgent):
                 yield progress(f"Resumed saved batch {index + 1} / {len(batches)} · {completed_parts} / {total_parts} scene parts verified")
                 continue
             yield progress(f"Breaking down scenes {batch[0]['number']}–{batch[-1]['number']} · batch {index + 1} / {len(batches)} · {len(pages)} pages read")
-            ctx.session.state["task_context"] = {"run": {"kind": "scenes"}, "sceneSegments": batch, "confirmedInputs": answers}
-            text = ""
-            async for event in specialist.run_async(ctx):
-                if event.is_final_response() and event.content:
-                    text = "".join(p.text or "" for p in event.content.parts or [])
+            ctx.session.state["task_context"] = {"run": {"kind": "scenes"}, "sceneSegments": batch, "confirmedInputs": answers, "enrichmentSchema": breakdown_schema()}
+            def decode(text):
+                result = json.loads(text)
+                validate_enrichment(result, batch)
+                return result
+            checked = {}
+            async for event in self._generate_checked(ctx, specialist, decode, checked):
                 yield event
-            result = json.loads(text)
-            validate_enrichment(result, batch)
+            result = checked["value"]
             await backend.post("saveSceneBatch", {"key": key, "result": result})
             results.append(result)
             completed_parts += len(batch)

@@ -93,3 +93,59 @@ def test_research_requires_real_production_area_on_legacy_boards():
     from sceneatlas.agent import missing_intake
     assert missing_intake({"entities": []}, "research")[0]["data"]["key"] == "search_area"
     assert missing_intake({"entities": [{"kind": "question", "data": {"key": "search_area", "resolution": "answered", "answer": "Los Angeles County"}}]}, "research") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("always_invalid", [False, True])
+async def test_invalid_research_quantity_is_repaired_without_repeating_search(monkeypatch, always_invalid):
+    import json
+    from types import SimpleNamespace
+    from google.adk.agents import LlmAgent
+    from google.adk.events import Event
+    from google.genai import types
+    from sceneatlas import agent
+
+    task = {"run": {"_id": "run", "kind": "research", "targetId": "scene"}, "entities": [
+        {"_id": "scene", "kind": "scene", "data": {"kind": "scene", "setting": "Beach", "needs": ["Open sand"], "candidateCount": 1}},
+        {"kind": "question", "data": {"key": "search_area", "answer": "Los Angeles County", "resolution": "answered"}},
+    ]}
+    model_calls, searches = [], []
+
+    class Backend:
+        def __init__(self, *_):
+            pass
+
+        async def post(self, operation):
+            assert operation == "context"
+            return task
+
+    async def tool(self, *, args, tool_context):
+        searches.append(args)
+        return {"provider": "exa", "fallbackReason": "Test fixture", "searchId": "exa_test", "retrievedAt": 1, "results": [{"url": "https://film.ca.gov/state-permits/", "title": "Official", "excerpt": "Observed evidence"}]}
+
+    async def model(self, ctx):
+        model_calls.append(ctx.session.state["task_context"].get("validationFeedback"))
+        result = {"locations": [{"kind": "location", "name": "Fixture beach", "address": "", "description": "Fixture", "creativeFit": "Open sand", "restrictions": [], "availability": "unverified", "authority": "", "sources": [{"url": "https://film.ca.gov/state-permits/"}], "requirements": [], "sceneIds": ["scene"], "rejected": False, "costs": [{"id": "fee", "label": "Unknown fee", "amountMinor": None, "currency": "USD", "unit": "day", "quantity": 0 if always_invalid or len(model_calls) == 1 else 1, "basis": "unknown", "coverageKey": "fee", "coverageReason": "Quote required", "assumptions": ""}]}], "questions": [], "message": "Fixture", "lockConflicts": []}
+        yield Event(invocation_id=ctx.invocation_id, author=self.name, content=types.Content(role="model", parts=[types.Part(text=json.dumps(result))]))
+
+    monkeypatch.setattr(agent, "Backend", Backend)
+    monkeypatch.setattr(agent, "ToolContext", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(agent.FunctionTool, "run_async", tool)
+    monkeypatch.setattr(LlmAgent, "run_async", model)
+    ctx = SimpleNamespace(invocation_id="research-repair", session=SimpleNamespace(state={}), user_content=types.Content(parts=[types.Part(text='{"runId":"run","attempt":1}')]))
+    events = []
+    async def collect():
+        async for event in agent.SceneAtlasAgent()._run_async_impl(ctx):
+            events.append(event)
+    if always_invalid:
+        with pytest.raises(ValueError, match="three attempts"):
+            await collect()
+        assert len(model_calls) == 3
+        assert not any("sceneatlasResult" in (p.text or "") for e in events for p in (e.content.parts if e.content else []))
+    else:
+        await collect()
+        result = json.loads(events[-1].content.parts[0].text)["sceneatlasResult"]
+        assert result["locations"][0]["costs"][0]["quantity"] == 1
+        assert result["locations"][0]["costs"][0]["amountMinor"] is None
+        assert len(model_calls) == 2 and model_calls[1]
+    assert len(searches) == 1

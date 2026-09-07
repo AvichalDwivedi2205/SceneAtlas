@@ -117,6 +117,20 @@ def test_specialist_request_does_not_inherit_earlier_batch_drafts():
     assert len(request.contents) == 1 and request.contents[0].role == "user"
 
 
+def test_answered_question_cannot_put_its_owner_back_into_an_invisible_wait():
+    from sceneatlas.agent import validate_new_questions
+    entities = [{"kind": "question", "ownerId": "location-a", "data": {
+        "key": "monitor_required", "resolution": "answered", "answer": "Keep monitor assignment unknown; use a contingency estimate."}}]
+    repeated = {"questions": [{"ownerId": "location-a", "data": {"key": "monitor_required"}}]}
+    with pytest.raises(ValueError, match="already answered"):
+        validate_new_questions(repeated, entities)
+    repeated["questions"][0]["ownerId"] = "location-b"
+    validate_new_questions(repeated, entities)
+    entities[0]["data"]["resolution"] = "open"
+    repeated["questions"][0]["ownerId"] = "location-a"
+    validate_new_questions(repeated, entities)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("conflicts", [[], ["Confirm shooting dates."]])
 async def test_complete_calculated_schedule_does_not_reask_confirmed_inputs(monkeypatch, conflicts):

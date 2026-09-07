@@ -130,6 +130,14 @@ def validate_draft(result: dict, pages: list[dict] | None = None):
             if normalize(scene["excerpt"]) not in normalize(original):
                 raise ValueError("Scene excerpt could not be matched to uploaded screenplay. Retry breakdown.")
 
+def validate_new_questions(result: dict, entities: list[dict]):
+    answered = {(e.get("ownerId"), e["data"]["key"]) for e in entities
+                if e.get("kind") == "question" and e["data"].get("resolution") == "answered"}
+    for question in result.get("questions", []):
+        key = question["data"].get("key")
+        if (question.get("ownerId"), key) in answered:
+            raise ValueError(f"Question {key} is already answered for this owner. Reuse the recorded answer and return the current result; do not ask the same question again.")
+
 class SceneAtlasAgent(BaseAgent):
     def __init__(self):
         # This schema is small enough to retain every generation constraint.
@@ -258,6 +266,7 @@ class SceneAtlasAgent(BaseAgent):
             for question in result.get("questions", []):
                 question["ownerId"]=task["run"].get("targetId")
                 question.pop("sceneNumber",None)
+            validate_new_questions(result, task["entities"])
             if kind in {"research","requirements"}:
                 target=next(e for e in task["entities"] if e["_id"]==task["run"]["targetId"])
                 result=normalize_sources(result,evidence,target["data"] if kind=="requirements" else None)

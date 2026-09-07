@@ -104,12 +104,16 @@ export default defineSchema({
     sourceId: v.id("entities"),
     targetId: v.id("entities"),
     relation: v.string(),
-  }).index("by_board", ["boardId"]),
+  })
+    .index("by_board", ["boardId"])
+    .index("by_source_target", ["sourceId", "targetId"]),
   dependencies: defineTable({
     boardId: v.id("boards"),
     sourceId: v.id("entities"),
     targetId: v.id("entities"),
-  }).index("by_board", ["boardId"]),
+  })
+    .index("by_board", ["boardId"])
+    .index("by_source_target", ["sourceId", "targetId"]),
   choices: defineTable({
     boardId: v.id("boards"),
     planId: v.id("entities"),

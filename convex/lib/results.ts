@@ -3,7 +3,7 @@ import { ConvexError } from "convex/values";
 import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { entitySchema, type EntityData } from "../../src/domain/model";
-import { connect, putEntity, updateEntity } from "./entities";
+import { boardPlacements, connect, putEntity, updateEntity } from "./entities";
 export const resultSchema = z.object({
   script: entitySchema.optional(),
   scenes: z.array(entitySchema).default([]),
@@ -42,11 +42,13 @@ export async function publishResult(
 ) {
   const actor = `agent:${run._id}`;
   const boardId = run.boardId;
+  const placements = await boardPlacements(ctx, boardId);
   let scriptId: Id<"entities"> | undefined;
   if (result.script) {
     if (run.kind !== "ingest" || result.script.kind !== "script")
       throw new ConvexError("Invalid script result.");
     scriptId = await putEntity(ctx, {
+      placements,
       boardId,
       data: result.script,
       scope: { kind: "workspace" },
@@ -72,6 +74,7 @@ export async function publishResult(
     if (data.kind !== "scene" || !scriptId)
       throw new ConvexError("Invalid scene result.");
     const id = await putEntity(ctx, {
+      placements,
       boardId,
       data,
       scope: { kind: "workspace" },
@@ -108,6 +111,7 @@ export async function publishResult(
     ].entries()) {
       const data = entitySchema.parse({ kind: "plan", ...p });
       const id = await putEntity(ctx, {
+        placements,
         boardId,
         data,
         scope: { kind: "workspace" },
@@ -156,6 +160,7 @@ export async function publishResult(
       (question) => question.ownerId === owner._id,
     ).length;
     const id = await putEntity(ctx, {
+      placements,
       boardId,
       data: q.data,
       scope: owner.scope,
@@ -225,6 +230,7 @@ export async function publishResult(
       .withIndex("by_entity", (q) => q.eq("entityId", owner._id))
       .unique();
     const id = await putEntity(ctx, {
+      placements,
       boardId,
       data,
       scope: owner.scope,
@@ -241,6 +247,7 @@ export async function publishResult(
         await connect(ctx, boardId, entity._id, id, "candidate");
     }
     const costId = await putEntity(ctx, {
+      placements,
       boardId,
       data: { kind: "cost", locationId: id, items: data.costs },
       scope: owner.scope,
@@ -253,6 +260,7 @@ export async function publishResult(
     await connect(ctx, boardId, id, costId, "cost");
     for (const [i, req] of data.requirements.entries()) {
       const reqId = await putEntity(ctx, {
+        placements,
         boardId,
         data: { ...req, kind: "requirement", locationId: id },
         scope: owner.scope,
@@ -273,6 +281,7 @@ export async function publishResult(
     )
       throw new ConvexError("Invalid schedule result.");
     const id = await putEntity(ctx, {
+      placements,
       boardId,
       data: result.schedule,
       scope: run.scope,
@@ -296,6 +305,7 @@ export async function publishResult(
     if (!asset || asset.boardId !== boardId || asset.createdBy !== actor)
       throw new ConvexError("Packet file is invalid.");
     const id = await putEntity(ctx, {
+      placements,
       boardId,
       data: result.packet,
       scope: run.scope,

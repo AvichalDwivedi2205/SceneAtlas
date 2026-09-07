@@ -7,6 +7,16 @@ import {
   type EntityData,
   type Scope,
 } from "../../src/domain/model";
+type Placement = Pick<Doc<"nodes">, "x" | "y" | "width" | "height">;
+export async function boardPlacements(
+  ctx: MutationCtx,
+  boardId: Id<"boards">,
+): Promise<Placement[]> {
+  return await ctx.db
+    .query("nodes")
+    .withIndex("by_board", (q) => q.eq("boardId", boardId))
+    .collect();
+}
 export async function validateScope(
   ctx: MutationCtx,
   boardId: Id<"boards">,
@@ -36,6 +46,7 @@ export async function putEntity(
     actor: string;
     x?: number;
     y?: number;
+    placements?: Placement[];
   },
 ) {
   const data = entitySchema.parse(args.data);
@@ -76,10 +87,8 @@ export async function putEntity(
   // Reserve space only for a new card. Existing collaborator placements stay put.
   const width = data.kind === "answer" ? 270 : 340;
   const height = 480;
-  const occupied = await ctx.db
-    .query("nodes")
-    .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
-    .collect();
+  const occupied =
+    args.placements ?? (await boardPlacements(ctx, args.boardId));
   const x = args.x ?? 0;
   let y = args.y ?? 0;
   for (let attempt = 0; attempt <= occupied.length; attempt++) {
@@ -105,6 +114,7 @@ export async function putEntity(
     geometryRevision: 1,
     manual: false,
   });
+  occupied.push({ x, y, width, height });
   return id;
 }
 export async function updateEntity(
@@ -150,7 +160,9 @@ export async function connect(
   if (sourceId === targetId) return;
   const edges = await ctx.db
     .query("edges")
-    .withIndex("by_board", (q) => q.eq("boardId", boardId))
+    .withIndex("by_source_target", (q) =>
+      q.eq("sourceId", sourceId).eq("targetId", targetId),
+    )
     .collect();
   if (
     !edges.some(
@@ -164,7 +176,9 @@ export async function connect(
   if (dependent) {
     const deps = await ctx.db
       .query("dependencies")
-      .withIndex("by_board", (q) => q.eq("boardId", boardId))
+      .withIndex("by_source_target", (q) =>
+        q.eq("sourceId", sourceId).eq("targetId", targetId),
+      )
       .collect();
     if (!deps.some((e) => e.sourceId === sourceId && e.targetId === targetId))
       await ctx.db.insert("dependencies", { boardId, sourceId, targetId });

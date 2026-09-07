@@ -1,4 +1,5 @@
 import json
+import io
 from types import SimpleNamespace
 
 import pytest
@@ -10,8 +11,27 @@ from sceneatlas.agent import SceneAtlasAgent, validate_draft
 from sceneatlas.screenplay import (
     BATCH_CHARACTERS, BATCH_SEGMENTS, SEGMENT_CHARACTERS,
     assemble_scenes, batch_key, index_scenes, scene_batches, selected_scenes,
-    validate_enrichment,
+    validate_enrichment, extract_pages,
 )
+
+
+def test_dense_100_page_pdf_exceeds_old_text_limit_without_losing_final_page():
+    from reportlab.pdfgen import canvas
+    output = io.BytesIO()
+    pdf = canvas.Canvas(output)
+    for page in range(1, 101):
+        pdf.setFont("Courier", 9)
+        pdf.drawString(55, 790, f"INT. ARCHIVE {page} - DAY")
+        for line in range(45):
+            pdf.drawString(55, 770 - line * 15, f"PAGE {page} LINE {line}: Mara compares a paper map with the brass marker on the table.")
+        pdf.showPage()
+    pdf.save()
+    pages = extract_pages(output.getvalue(), "application/pdf")
+    assert len(pages) == 100
+    assert sum(len(p["text"]) for p in pages) > 250_000
+    assert "PAGE 100 LINE 44" in pages[-1]["text"]
+    scenes = index_scenes(pages)
+    assert len(scenes) == 100 and scenes[-1].page_end == 100
 
 
 def enrichment(batch):

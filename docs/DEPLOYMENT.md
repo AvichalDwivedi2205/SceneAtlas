@@ -1,6 +1,6 @@
 # SceneAtlas deployed development environment
 
-Last verified: September 6, 2026.
+Last verified: September 7, 2026.
 
 | Resource | Value | State |
 | --- | --- | --- |
@@ -26,6 +26,9 @@ Verified cloud boundaries:
 - Three isolated browser sessions passed real Clerk sign-in, workspace creation, recipient-bound editor/viewer invitations, shared note updates, presence, reload persistence, and server rejection of viewer writes.
 - Full hosted workflow acceptance passed: screenplay upload, confirmed intake, one editable scene, sourced location research, selected-location requirements refresh, provisional schedule, and authenticated PDF download. Real run IDs are recorded below.
 - The 12-node interactive sample canvas passes navigation and evidence-inspection tests. Clerk development builds can emit provider development/telemetry warnings.
+- Real PDF scale acceptance passed: a 20-page PDF produced 28 scenes and recovered from a deliberate cancellation; the complete 124-page screenplay produced all 202 scenes across 34 saved batches. Two users shared the board, reload and last-scene navigation passed, and every source record was checked. See [full screenplay evidence](SCREENPLAY_SCALE.md).
+
+The September 7 deployment uses Vercel `dpl_DeumcpM9zYnkRDkPtGeyaLkn4PAW`, Cloud Run revision `sceneatlas-agent-bridge-00007-6hd`, and managed Agent Engine update operation `8907414816423936000`. It includes saved screenplay batches, worker heartbeats, source-preserving PDF layout extraction, indexed graph publication, compact scene placement, and visible-card rendering. Convex functions were last deployed at 20:21 IST for the scale acceptance run.
 
 Managed acceptance evidence (one original illustrative screenplay, September 6):
 
@@ -62,4 +65,4 @@ Convex currently warns that the account is above Free-plan limits. Resolve accou
 
 PDF validation includes readable table headers, per-item rate × quantity and totals, producer-confirmed inputs, original retrieval dates for reused evidence, and fee-source links. Unit tests cover quantity conflicts, mixed-currency totals, and assumptions that must remain estimates. Official requirements use CFC state-permit guidance or the named park’s own official page; unrelated park references remain unverified.
 
-Remaining release work: official-form drafting and a ZIP bundle are not implemented; the current export is a preparation PDF plus JSON manifest and official guidance links. Broader multi-scene stress tests, revision/regeneration acceptance, production Clerk configuration, and submission/demo deliverables also remain. The application does not submit permit applications or represent external approval.
+Remaining release work: official-form drafting and a ZIP bundle are not implemented; the current export is a preparation PDF plus JSON manifest and official guidance links. Full-script intake/breakdown/canvas scale is now verified. Research, scheduling, and packet generation across every scene of a feature, broader revision/regeneration acceptance, production Clerk configuration, and submission/demo deliverables still need completion or validation. The application does not submit permit applications or represent external approval.

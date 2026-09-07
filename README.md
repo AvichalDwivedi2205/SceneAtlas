@@ -28,6 +28,7 @@ Convex is authoritative for boards, memberships, entity revisions, dependencies,
 - Same-board subscriptions, online presence, cursors, selections, and editing signals.
 - Separate entity and geometry revisions. Stale writes fail with a draft-preserving message.
 - Uploaded PDF/text screenplay retained as source; exact scene excerpts must match extracted pages.
+- Full-screenplay breakdown uses page-aware scene indexing, bounded model batches, saved-batch retry, and atomic publication. Large boards use a compact scene grid and visible-card rendering. See [processing limits and scale acceptance](docs/SCREENPLAY_SCALE.md).
 - Explicit clarification checkpoint before scene and research stages.
 - Location discovery always starts with Parallel Search. Optional Exa fallback handles quota, timeout, and service outages when explicitly enabled. Provider names, request IDs, and fallback reasons stay attached to sources. Returned URLs are allowlisted into agent results; official pilot requirements need CFC state-permit guidance or the named park’s own official page. Other park references remain unverified.
 - Costs preserve published, quoted, estimated, and unknown states. Modeled rates and assumed quantities remain estimates. Shared charges deduplicate by documented coverage key, with conflicting units/quantities kept visible. Other currencies stay outside plan totals until conversion is supplied.
@@ -117,4 +118,4 @@ Tests cover cost accounting, hard scheduling inputs, dependency traversal, role 
 
 ## Current pilot limits
 
-English screenplay text only; text-based PDFs up to 300 pages and 50 MB. California state-property permitting sources are the supported official pilot. Availability, permission, approval, booking, filing, payment, and signatures happen outside SceneAtlas. Scanned PDFs need OCR before upload.
+English screenplay text only; text-based PDFs up to 300 pages and 50 MB, with at most 1,200,000 extracted characters and 300 detected scenes. See [scale acceptance](docs/SCREENPLAY_SCALE.md) for verified workloads and format requirements. California state-property permitting sources are the supported official pilot. Availability, permission, approval, booking, filing, payment, and signatures happen outside SceneAtlas. Scanned PDFs need OCR before upload.

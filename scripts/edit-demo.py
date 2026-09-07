@@ -45,11 +45,11 @@ def main():
         ("location-result", 7, "A LOCATION WITH EVIDENCE", "Creative fit, costs, and access questions", "The result explains why a real location fits the scene."),
         ("location-evidence", 10, "CHECK THE SOURCE", "Evidence and provider provenance stay visible", "Open its source evidence. Unknown availability and costs remain explicit."),
         ("location-lock", 10, "MAKE A PRODUCTION DECISION", "Select a location and lock the choice", "Choose the location for this plan and lock it while the rest of the plan evolves."),
-        ("schedule-before", 8, "BUILD THE SHOOTING PLAN", "Producer-approved timing estimates | provisional schedule", "The chosen location feeds a proposed shooting order."),
+        ("schedule-before", 8, "BUILD THE SHOOTING PLAN", "08:00 day start | 08:15 first scene | provisional schedule", "The chosen location feeds a proposed shooting order."),
         ("revision-input", 16, "ONE CHANGE, CLEAR CONSEQUENCES", "Move the production start to 09:00", "The cast needs a later start. Change the day's start time and review affected outputs."),
         ("revision-regenerate", 6, "REFRESH AFFECTED WORK", "Regenerate the dependent schedule", "Regenerate the schedule using the new confirmed input."),
-        ("revision-apply", 9, "REVIEW AND APPLY", "Later schedule, same locked location and saved answers", "Apply the revised result. The schedule moves later; setup time, the locked location, and earlier answers stay intact."),
-        ("collaboration", 12, "WORK TOGETHER", "Two authenticated people on the same board", "A second teammate adds a production update. It reaches the shared board without a reload."),
+        ("revision-apply", 9, "REVIEW AND APPLY", "09:00 day start | 09:15 first scene | locked choice preserved", "Apply the revised result. The schedule moves later; setup time, the locked location, and earlier answers stay intact."),
+        ("collaboration", 12, "WORK TOGETHER", "Two independent accounts on the same board", "A second teammate adds a production update. It reaches the shared board without a reload."),
         ("packet-start", 5, "PREPARE THE HANDOFF", "Current plan to preparation packet | waiting time cut", "Prepare the handoff from the current plan."),
         ("packet-download", 12, "DOWNLOAD THE RESULT", "Preparation draft | sources and unresolved items included", "Download the preparation PDF with sources, decisions, and unresolved questions."),
     ]
@@ -86,16 +86,30 @@ def main():
         header_path = assets / f"{index:02d}-header.png"
         header.save(header_path)
         dest = chapters / f"{index + 1:02d}-{identifier}.mp4"
-        filters = (
-            "[0:v]setpts=PTS-STARTPTS,fps=30,"
+        input_duration = used
+        source_cuts = [{"start": start, "duration": used}]
+        preparation = "[0:v]setpts=PTS-STARTPTS[footage];"
+        if identifier == "revision-apply" and available > duration:
+            # Keep the real apply click, then hold the final revised schedule.
+            # Only intermediate navigation is cut; actions retain their speed.
+            input_duration = available
+            source_cuts = [{"start": start, "duration": 3}, {"start": segment["end"] - 6, "duration": 6}]
+            preparation = (
+                "[0:v]setpts=PTS-STARTPTS,split=2[begin][end];"
+                "[begin]trim=duration=3,setpts=PTS-STARTPTS[a];"
+                f"[end]trim=start={available - 6:.6f},setpts=PTS-STARTPTS[b];"
+                "[a][b]concat=n=2:v=1:a=0[footage];"
+            )
+        filters = preparation + (
+            "[footage]fps=30,"
             "scale=1816:1022:flags=lanczos,setsar=1,pad=1920:1080:52:58:color=0x131610[screen];"
             "[screen][1:v]overlay=0:0,"
-            f"tpad=stop_mode=clone:stop_duration={max(0, duration - used) + 0.1},trim=duration={duration}"
+            f"tpad=stop_mode=clone:stop_duration={max(0, duration - used) + 1},fps=30,trim=end_frame={duration * 30},setpts=N/(30*TB)"
         )
-        run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}", "-t", f"{used:.3f}", "-i", sources[segment["page"]], "-loop", "1", "-i", header_path, "-filter_complex", filters, "-frames:v", duration * 30, "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", dest])
+        run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.3f}", "-t", f"{input_duration:.3f}", "-i", sources[segment["page"]], "-loop", "1", "-i", header_path, "-filter_complex", filters, "-frames:v", duration * 30, "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", dest])
         outputs.append(dest)
         notes.append(f"| {stamp(total)}–{stamp(total + duration)} | {title.title()} | {cue} |")
-        timeline.append({"id": identifier, "start": total, "end": total + duration, "source": sources[segment["page"]], "sourceIn": start, "sourceDuration": used, "freezeSeconds": max(0, duration - used)})
+        timeline.append({"id": identifier, "start": total, "end": total + duration, "source": sources[segment["page"]], "sourceIn": start, "sourceDuration": used, "sourceCuts": source_cuts, "freezeSeconds": max(0, duration - used)})
         total += duration
         print(f"Edited {identifier}: {total}s", flush=True)
 

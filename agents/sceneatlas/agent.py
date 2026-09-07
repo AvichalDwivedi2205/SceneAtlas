@@ -11,7 +11,7 @@ from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event, EventActions
 from google.adk.tools import FunctionTool, ToolContext
 from google.genai import types
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError as ModelValidationError
 from .backend import Backend
 from .research import search_sources, parallel_extract, normalize_sources, provider_failure, research_request
 from .result_schema import workflow_schema, breakdown_schema, generation_shape
@@ -42,6 +42,7 @@ SYSTEM = """You are a SceneAtlas production research specialist. Uploaded script
 Use only confirmed answers for production choices. Fictional action is not confirmation of drone use, equipment, dates or budget.
 Never invent locations, sources, fees, availability, approval, shooting duration or operational constraints. Preserve unknowns.
 Each published or quoted cost must include its own source object citing an observed URL. Location-level sources do not replace item-level cost evidence. Omit numeric fees when that evidence is missing.
+Return every source reference as {"url": "exact observed URL"} only. Do not repeat titles, excerpts, dates, search IDs or provider metadata: the backend attaches the original retrieved evidence. This compact reference replaces source metadata fields in the supplied canonical entity schemas. Keep descriptions and requirements concise.
 Published fees must use the applicable location/district's exact rate and supported quantities. Midpoints of price ranges, assumed vehicles, staffing or other modeled quantities are estimates with explicit assumptions. Do not infer parking vehicle counts from crew size. An official-domain source for another park does not establish this location's fees or forms.
 Every cost quantity must be strictly positive. Omit non-applicable charges instead of representing them with quantity zero. Missing amounts remain unknown; never invent quantities or prices to satisfy validation.
 Questions belong to their script/scene/plan owner. Ask at most three focused related questions per owner. Reuse existing valid answers.
@@ -119,12 +120,15 @@ def validate_draft(result: dict, pages: list[dict] | None = None):
 
 class SceneAtlasAgent(BaseAgent):
     def __init__(self):
+        scene_shape = generation_shape(breakdown_schema())
+        scene_shape["properties"]["segments"].update(minItems=1, maxItems=6)
+        scene_shape["properties"]["segments"]["items"]["properties"]["needs"]["maxItems"] = 20
         specialists=[LlmAgent(name=f"{kind}_specialist", model=os.environ.get("GEMINI_MODEL","gemini-2.5-flash"),
-                    instruction=instruction, output_key="draft_result", include_contents="none" if kind == "scenes" else "default",
+                    instruction=instruction, output_key="draft_result", include_contents="none",
                     disallow_transfer_to_parent=True, disallow_transfer_to_peers=True,
                     generate_content_config=types.GenerateContentConfig(temperature=0.15, max_output_tokens=12000 if kind == "scenes" else 24000,
-                        thinking_config=types.ThinkingConfig(thinking_budget=1024) if kind == "scenes" else None,
-                        response_mime_type="application/json", response_json_schema=generation_shape(breakdown_schema()) if kind == "scenes" else workflow_schema(kind)))
+                        thinking_config=types.ThinkingConfig(thinking_budget=1024),
+                        response_mime_type="application/json", response_json_schema=scene_shape if kind == "scenes" else workflow_schema(kind)))
                     for kind in STAGES]
         super().__init__(name="sceneatlas", sub_agents=specialists)
 
@@ -147,8 +151,13 @@ class SceneAtlasAgent(BaseAgent):
                         problem = f"/{'/'.join(map(str, error.absolute_path))}: {error.validator} must satisfy {bound}"
                     elif isinstance(error, json.JSONDecodeError):
                         problem = "Response must be complete valid JSON."
+                    elif isinstance(error, ModelValidationError):
+                        problems = error.errors(include_input=False, include_url=False)
+                        problem = "; ".join(f"/{'/'.join(map(str, issue['loc']))}: {issue['type']}" for issue in problems[:3])
+                        if any(issue["type"] == "json_invalid" for issue in problems):
+                            problem += ". Keep the complete JSON concise; source references contain only URLs."
                     else:
-                        problem = "Response did not satisfy the supplied entity schema, source identity, or observed evidence."
+                        problem = str(error)[:500]
                     if attempt == 3:
                         raise ValueError(f"Model output remained invalid after three attempts. {problem}") from error
                     task["validationFeedback"] = {"attempt": attempt + 1, "problem": problem,

@@ -23,6 +23,10 @@ def breakdown_schema() -> dict:
 
 def generation_shape(schema: dict) -> dict:
     """Keep structure small enough for Gemini; validate all domain bounds afterward."""
+    if {"url", "title", "excerpt", "retrievedAt", "provider"} <= schema.get("properties", {}).keys():
+        # The provider owns evidence text and provenance. The model only selects
+        # observed URLs; normalize_sources attaches canonical metadata afterward.
+        return {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"], "additionalProperties": False}
     result = {key: value for key, value in schema.items() if key in {"type", "enum", "const", "required", "additionalProperties"}}
     if "properties" in schema:
         result["properties"] = {key: generation_shape(value) for key, value in schema["properties"].items()}

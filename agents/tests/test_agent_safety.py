@@ -89,6 +89,13 @@ def test_generation_schema_closes_entities_but_leaves_bounds_to_validation():
     assert question["properties"]["data"]["properties"]["answer"] == {"type": "null"}
 
 
+def test_research_generation_uses_url_references_instead_of_repeating_evidence():
+    from sceneatlas.result_schema import workflow_schema
+    location = workflow_schema("research")["properties"]["locations"]["items"]["properties"]
+    for reference in [location["sources"]["items"], location["costs"]["items"]["properties"]["source"], location["requirements"]["items"]["properties"]["sources"]["items"]]:
+        assert reference == {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"], "additionalProperties": False}
+
+
 def test_research_requires_real_production_area_on_legacy_boards():
     from sceneatlas.agent import missing_intake
     assert missing_intake({"entities": []}, "research")[0]["data"]["key"] == "search_area"

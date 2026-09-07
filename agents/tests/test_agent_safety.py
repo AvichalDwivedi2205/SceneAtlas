@@ -96,6 +96,15 @@ def test_research_generation_uses_url_references_instead_of_repeating_evidence()
         assert reference == {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"], "additionalProperties": False}
 
 
+def test_scene_generation_retains_card_text_limits():
+    from sceneatlas.agent import SceneAtlasAgent
+    specialist = next(a for a in SceneAtlasAgent().sub_agents if a.name == "scenes_specialist")
+    segment = specialist.generate_content_config.response_json_schema["properties"]["segments"]["items"]["properties"]
+    assert segment["needs"]["items"]["maxLength"] == 200
+    assert segment["setting"]["maxLength"] == 300
+    assert segment["timeOfDay"]["maxLength"] == 100
+
+
 def test_research_requires_real_production_area_on_legacy_boards():
     from sceneatlas.agent import missing_intake
     assert missing_intake({"entities": []}, "research")[0]["data"]["key"] == "search_area"

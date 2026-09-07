@@ -14,7 +14,7 @@ from google.genai import types
 from pydantic import BaseModel, Field, ValidationError as ModelValidationError
 from .backend import Backend
 from .research import search_sources, parallel_extract, normalize_sources, provider_failure, research_request
-from .result_schema import workflow_schema, breakdown_schema, generation_shape
+from .result_schema import workflow_schema, breakdown_schema
 from .screenplay import extract_pages, index_scenes, selected_scenes, scene_batches, batch_key, validate_enrichment, assemble_scenes
 
 CONTRACT = json.loads(Path(__file__).with_name("entity.schema.json").read_text())
@@ -120,9 +120,9 @@ def validate_draft(result: dict, pages: list[dict] | None = None):
 
 class SceneAtlasAgent(BaseAgent):
     def __init__(self):
-        scene_shape = generation_shape(breakdown_schema())
-        scene_shape["properties"]["segments"].update(minItems=1, maxItems=6)
-        scene_shape["properties"]["segments"]["items"]["properties"]["needs"]["maxItems"] = 20
+        # This schema is small enough to retain every generation constraint.
+        # In particular, grouped needs must still fit the card's text bound.
+        scene_shape = breakdown_schema()
         specialists=[LlmAgent(name=f"{kind}_specialist", model=os.environ.get("GEMINI_MODEL","gemini-2.5-flash"),
                     instruction=instruction, output_key="draft_result", include_contents="none",
                     disallow_transfer_to_parent=True, disallow_transfer_to_peers=True,

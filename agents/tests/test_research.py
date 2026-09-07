@@ -110,7 +110,7 @@ def test_another_parks_official_form_does_not_establish_this_parks_rules():
     normalized = research.normalize_sources({"locations": [location]}, evidence)["locations"][0]
     assert normalized["costs"][0]["amountMinor"] is None
     requirement = normalized["requirements"][0]
-    assert requirement["status"] == "unknown"
+    assert requirement["status"] == "unresolved"
     assert requirement["sources"] == []
     assert "formUrl" not in requirement
     assert "not verified for this park" in requirement["detail"]

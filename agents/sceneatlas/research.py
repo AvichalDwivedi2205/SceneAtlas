@@ -185,7 +185,7 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
             if inapplicable:
                 req["sources"] = [source for source in req.get("sources", []) if source not in inapplicable]
                 if not req["sources"]:
-                    req.update(status="unknown", detail="The retrieved official reference is not verified for this park. Confirm the applicable requirement with this location's authority.", attachments=[])
+                    req.update(status="unresolved", detail="The retrieved official reference is not verified for this park. Confirm the applicable requirement with this location's authority.", attachments=[])
                     req.pop("formUrl", None)
             if req.get("status") == "sourced" and not req.get("sources"):
                 raise ValueError("Requirement has no official source.")

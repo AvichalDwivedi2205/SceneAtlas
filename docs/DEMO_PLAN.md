@@ -1,20 +1,96 @@
-# SceneAtlas demo recording plan
+# SceneAtlas recorded hackathon demo
 
-Prepared September 7, 2026. Research and storyboard are ready; no footage has been recorded for this plan.
+Recorded September 7, 2026, against https://sceneatlas-black.vercel.app.
 
-## Recommendation
+The completed silent master is **2:55, 1920 × 1080, 30 fps, H.264**. It leaves five seconds below the PRD's three-minute limit. The user will add the voiceover; no generated narration or music is included.
 
-Produce a 2:55 silent, 1920 × 1080, 16:9 H.264 MP4 with separate chapter clips and voiceover timing notes. The user will record and add the voiceover. The PRD allows at most three minutes, so the edit leaves five seconds of headroom.
+## Delivered story
 
-Show the 202-scene canvas for about seven seconds to establish scale, then focus on readable cards and a complete production decision. The main claim is: **SceneAtlas turns a screenplay into a shared planning workspace where research, choices, and preparation documents remain connected.**
+Open on the actual 202-scene graph to establish scale, then show the full PDF upload and producer-confirmed breakdown. At 0:44, an explicit “Focused planning example” transition introduces the original one-scene *Coastal Rehearsal*. Follow live location research, inspect its sources, select and lock Point Dume State Beach, revise the production start, receive a teammate's note, and download the preparation PDF.
 
-The 124-page / 202-scene result proves full-script intake and breakdown. The currently verified decision-to-export workflow uses a separate, original one-scene screenplay. Until the combined workflow is verified, use an explicit transition into “Focused planning example.” Do not imply that all 202 scenes have completed research, scheduling, and packet generation.
+The full-length test uses the 124-page *Big Fish* screenplay from [John August's library](https://johnaugust.com/library). The upload and 202-card result belong to the same recorded board. Every scene number, heading, source span, and excerpt matched the independently reviewed inventory; the final scene reaches physical PDF page 124. The input PDF and full screenplay text are not bundled into the delivery kit. This is source-test attribution, not a claim of a public-demo license.
+
+The scale sequence proves full-script intake, breakdown, and canvas navigation. Research, schedule revision, collaboration, and export are demonstrated on the separately labeled original scene. The film's 202 scenes have not all been researched, scheduled, or exported.
+
+## Actual timeline
+
+| Time | Shot | Voiceover cue |
+| --- | --- | --- |
+| 0:00–0:08 | Full-Script Scale | A full screenplay becomes one connected production workspace. |
+| 0:08–0:16 | Start With The Screenplay | Upload the entire screenplay to a private board. |
+| 0:16–0:26 | Producer Stays In Control | The agent asks which scenes to break down. Your answer stays attached. |
+| 0:26–0:32 | Visible Work In Progress | The board shows the work happening in the background. |
+| 0:32–0:39 | Complete Breakdown | All pages were read and every scene was checked against the source inventory. |
+| 0:39–0:44 | Find Any Scene | Use the scene index to reach the end of the script. |
+| 0:44–0:56 | Focused Planning Example | Now follow one original coastal scene through planning. Confirm the crew and equipment before research. |
+| 0:56–1:04 | Research Real Locations | SceneAtlas researches locations against the scene and confirmed production needs. |
+| 1:04–1:11 | A Location With Evidence | The result explains why a real location fits the scene. |
+| 1:11–1:21 | Check The Source | Open its source evidence. Unknown availability and costs remain explicit. |
+| 1:21–1:31 | Make A Production Decision | Choose the location for this plan and lock it while the rest of the plan evolves. |
+| 1:31–1:39 | Build The Shooting Plan | The chosen location feeds a proposed shooting order. |
+| 1:39–1:55 | One Change, Clear Consequences | The cast needs a later start. Change the day's start time and review affected outputs. |
+| 1:55–2:01 | Refresh Affected Work | Regenerate the schedule using the new confirmed input. |
+| 2:01–2:10 | Review And Apply | Apply the revised result. The schedule moves later; setup time, the locked location, and earlier answers stay intact. |
+| 2:10–2:22 | Work Together | A second teammate adds a production update. It reaches the shared board without a reload. |
+| 2:22–2:27 | Prepare The Handoff | Prepare the handoff from the current plan. |
+| 2:27–2:39 | Download The Result | Download the preparation PDF with sources, decisions, and unresolved questions. |
+| 2:39–2:46 | Downloaded PDF | This is a preparation draft for review. External permission and unverified items still need confirmation. |
+| 2:46–2:55 | SceneAtlas | SceneAtlas keeps the screenplay, research, and team decisions connected through the handoff. |
+
+## Acceptance evidence
+
+The exact complete browser path passed twice consecutively (`rehearsal-8`, `rehearsal-9`) before capture. The final recorded pass also passed all assertions, with 19 recorded shot markers and no browser errors. The edit uses 18 of those shots plus the actual downloaded PDF and a closing card.
+
+| Recorded assertion | Result |
+| --- | --- |
+| Full upload and scene breakdown | 124 physical PDF pages, 202 verified scenes, 34 batches |
+| Full-script breakdown duration | 325.6 seconds in this recorded run; processing waits are cut and labeled |
+| Location research | Real Parallel sources; provider and source links remain visible |
+| Principal revision | Production start 08:00 → 09:00; first scene 08:15–09:15 → 09:15–10:15 |
+| Preserved inputs | Locked location, saved producer answer, and 15-minute setup offset retained |
+| Collaboration | Two independent authenticated accounts; editor note reaches owner's visible board without reload |
+| Export | Actual six-page preparation PDF downloaded through the signed-in UI |
+
+Recorded cloud runs:
+
+| Stage | Run ID |
+| --- | --- |
+| Original scene · ingest | `ks77vdzsv62a1axc3r6rkx128d8dzaan` |
+| Full screenplay · ingest | `ks7c43vbnbph4p04rxf0s6k07d8dzgg1` |
+| Original scene · scenes | `ks706jfwt2799j3zrm237ntan58dyrnf` |
+| Original scene · research | `ks72f4afmyepmce68wbnvvgtm18dyaj4` |
+| Original scene · schedule | `ks7e3ybpa6gx2zzqn7v0cgcm198dya06` |
+| Original scene · schedule | `ks77a1heryyb0jsjyxjhj4zk558dy66s` |
+| Original scene · packet | `ks7eveygfd4w99tfwbfbh142fs8dy3et` |
+| Full screenplay · scenes | `ks76chfsze6zsrekvjrte96keh8dz5hk` |
+
+The recorded research used Parallel search `search_ae82d6d2e7729c5dfa8a7f4ffa3ca3e5`, including California State Parks and California Film Commission sources. Exa remains an enabled fallback, but did not supply this recorded result. Costs, availability, and permission uncertainties stay visible; the PDF is a preparation draft. No official-form drafting, application submission, external approval, or generated ZIP permit bundle is claimed.
+
+## Production and delivery
+
+[`scripts/record-demo.mjs`](../scripts/record-demo.mjs) captures the real hosted app using Playwright, asserts the workflow, records source timestamps and cloud run references, and gates recording on two successful full rehearsals. Demonstrated writes occur through the UI. Read-only backend snapshots verify results. Auth setup and invitation preparation are outside the final cuts.
+
+[`scripts/edit-demo.py`](../scripts/edit-demo.py) assembles the footage with FFmpeg and restrained graphics matching the olive/brass interface. It preserves action speed. Long waits and intermediate navigation are cut, and short visual holds can repeat the final frame. The revision chapter keeps the apply click and the final revised schedule. The document shot renders the PDF actually downloaded by the app.
+
+Local deliverables (media are intentionally ignored by Git):
+
+- `artifacts/demo-video/sceneatlas-silent.mp4`: completed 2:55 master.
+- `artifacts/demo-video/chapters/`: 20 separate MP4 clips for editing around the voiceover.
+- `artifacts/demo-video/timing.md`: time ranges and optional narration cues.
+- `artifacts/demo-video/preparation-packet.pdf`: actual six-page downloaded draft.
+- `artifacts/demo-video/evidence.json`: sanitized run, source, rehearsal, editing, and media-verification evidence.
+- `artifacts/demo-video/sceneatlas-demo-kit.zip`: master, chapters, timing, readme, evidence, and preparation PDF.
+
+Raw browser recordings remain local and are excluded from the delivery archive because they include off-camera invitation setup. The original screenplay, credentials, and auth state are also excluded. All 22 disposable rehearsal/recording boards were archived, the two demo actors deleted, and their local browser auth files removed.
+
+Final media verification is recorded in the delivery's `evidence.json`: frame inspection across all chapters, exact frame count/dimensions, full decode, and native playback completion. Voiceover synchronization and subtitles remain the next editing step after the user records narration.
 
 ## Recording approach and research
 
+
 Use agent-authored Playwright browser automation to operate the hosted application and capture its actual UI. Set both viewport and recording dimensions explicitly to 1920 × 1080; Playwright otherwise scales its default recording into an 800 × 800 area. Close the browser context to finalize each video. [Playwright video documentation](https://playwright.dev/docs/videos)
 
-Assemble the selected footage with the existing local FFmpeg installation. Use restrained cursor emphasis, deliberate holds, chapter labels, and cuts over long waits. Playwright is already a project dependency; FFmpeg and ffprobe are available locally. This route requires no new recording-service account or API key. Live product runs still use the existing application providers and their ordinary quotas.
+Assemble the selected footage with the existing local FFmpeg installation. Use restrained cursor emphasis, deliberate holds, chapter labels, and cuts over long waits. Playwright is already a project dependency; FFmpeg and ffprobe are available locally. This route required no new recording-service account or API key. Live product runs still use the existing application providers and their ordinary quotas.
 
 Other approaches researched:
 
@@ -26,53 +102,4 @@ Other approaches researched:
 | Descript | Combines screen capture with transcript-based editing and AI cleanup. | More useful once the user's voiceover exists; speech-based editing provides less value for the silent master. [Screen recording workflow](https://www.descript.com/screen-recording) |
 | Remotion with an AI agent | Provides skills for creating compositions, animation, captions, and renders through code. | Optional for custom motion graphics around recorded footage. FFmpeg is sufficient for the first edit. [Official agent skills](https://www.remotion.dev/docs/ai/skills) |
 
-These are documented capabilities and workflow examples, not a hands-on comparison of every editor. The proposed production route is Playwright plus FFmpeg.
-
-## Storyboard
-
-Times below are edit targets. Record real action durations first, then choose cuts and holds against those recordings. Do not globally accelerate the master.
-
-| Time | Entry state and action | Success assertion | Voiceover point and hold |
-| --- | --- | --- | --- |
-| 0:00–0:08 | Open the completed scale board; fit the graph to show the scene grid and its count. | Count matches the verified source inventory. The graph is loaded and interactive. | “A feature-length screenplay becomes one connected workspace.” Hold the wide view for about seven seconds. |
-| 0:08–0:32 | Cut back to a new workspace. Upload the full 100+ page PDF, show real reading progress, and answer scope plus one consequential producer question. | Filename, page count, actual task state, and saved answer are visible. | Establish a real full-file upload and producer control. Cut over processing with an elapsed-time label derived from that take. |
-| 0:32–0:50 | Show completed breakdown; use the script index to jump to the final scene, then focus one readable card. | The last scene reaches the last screenplay page; heading and page span match the source. | Prove completeness and navigation. Hold the focused card long enough to read its heading and page span. |
-| 0:50–1:22 | Transition visibly to “Focused planning example.” Use the original coastal scene, start location research, show searching/source-checking states, then inspect a returned location and its evidence. | A real provider event produced the displayed results; source link and retrieval/provenance details are present. | Show research informing a choice. Hold the evidence panel for at least five seconds. |
-| 1:22–1:48 | Inspect Budget and Creative plan settings. Select and lock a researched location for the chosen plan; inspect costs and provisional shooting order. | The choice persists; displayed costs retain their evidence or estimate labels. Unknown availability remains visible. | Explain one concrete tradeoff. Only claim a calculated comparison if both branch outputs have been generated and checked. |
-| 1:48–2:17 | Change one producer answer or location filter; preview affected outputs, regenerate, and apply the revision. | The intended output updates; an unrelated saved answer and locked choice remain intact. | Show one change propagating through its dependencies. This scene requires additional live acceptance before recording. |
-| 2:17–2:34 | Keep two authenticated people on the same board. Have the editor add a short note while recording the owner's view; briefly show the two views together if useful. | Presence shows both people; the owner's view receives the editor's note without reload. | “The team can work together or follow along.” Hold the arriving note for four seconds. |
-| 2:34–2:55 | Open Preparation packet, download the current chosen plan's PDF, and show the downloaded document with a source and an unresolved item. Close on the app name and hosted URL. | The download succeeds and the PDF reflects the current plan. It is labeled a preparation draft. | Close on a useful deliverable. Leave the final frame for three seconds. |
-
-If the revision sequence does not pass its live checks, replace that scene with a visibly labeled requirements refresh and a longer evidence inspection. Record the resulting feature scope accurately in the submission; this replacement does not mean the PRD's revision acceptance is complete.
-
-## Scale footage and sample screenplay
-
-The measured full-length test used the 124-page *Big Fish* PDF and produced 202 scenes. Its breakdown took 250.4 seconds; upload/intake took another 32.6 seconds. These are separate measurements from one test, not a promise for a new recording. See [full screenplay evidence](SCREENPLAY_SCALE.md).
-
-For the public recording, prefer an original or otherwise cleared full-length screenplay. Show its actual resulting count; do not pad a script to force 202 cards. If the public sample differs, label the 202-scene result as separate scale-test evidence. Do not connect an upload of one file to the results of another without an explicit transition.
-
-The original one-scene “Coastal Rehearsal” fixture in `e2e/live-workflow.spec.ts` is available for the focused planning sequence. It uses explicitly illustrative production inputs. Keep those labels and do not present test assumptions as verified prices, access, or approvals.
-
-The previous scale and workflow boards were archived and their disposable users deleted. Prepare fresh recording boards and authenticate before the timed sequence. Existing screenshots can serve as labeled historical evidence, not as a substitute for recorded interaction.
-
-## Preparation and verification
-
-1. Select the full-length public sample and review its expected scene inventory. Confirm the exact public URL is `https://sceneatlas-black.vercel.app`.
-2. Prepare scale and focused-planning boards, with two authenticated people for the collaboration shot. Keep auth state outside the repository and outside the video frame.
-3. Rehearse the exact visible UI path, including actions that prior integration tests invoked through APIs. Those tests are useful backend evidence but do not replace a click-by-click recording rehearsal.
-4. Verify branch comparison and the one principal revision, including preserved answers and choices. Current broader revision acceptance remains incomplete. Check current provider/Convex quota headroom before long live runs; the last deployment report recorded exceeded Free-plan usage.
-5. Complete two consecutive successful dry passes. The recording skill explicitly requires: “Do not record until the complete path works twice consecutively.” See the local [demo-video-producer skill](/Users/avichaldwivedi/.codex/skills/demo-video-producer/SKILL.md).
-6. Record with normal action timing and the actual loading states. Log scene boundaries and real elapsed durations. Include real Parallel use for the submission story; if Exa serves a fallback, preserve its visible provenance and do not describe that result as Parallel.
-7. Edit into the target timeline. Preserve the application's olive, brass, and clay visual style. Favor full-screen product footage, readable cards, restrained zooms, and short editorial labels. Keep loading cut labels separate from application-generated status text.
-8. Inspect the whole silent master, sample frames throughout, and verify H.264, dimensions, duration, and successful playback. Hand over timing notes and separate chapter clips for the user's voiceover. Check voiceover synchronization and subtitles after the user adds audio.
-
-The current export is a preparation PDF with a JSON manifest and official guidance links. Official-form drafting, ZIP export, and external submission/approval are not part of the recorded claim.
-
-## Planned deliverables
-
-- `artifacts/demo-video/sceneatlas-silent.mp4`: the 2:55 master.
-- `artifacts/demo-video/chapters/`: separately editable scene clips.
-- `artifacts/demo-video/timing.md`: actual in/out times and concise voiceover cues.
-- `artifacts/demo-video/evidence.json`: source page/scene counts, real run references, measured waits, and rehearsal results; no credentials or auth state.
-
-These paths describe future recording outputs. This planning task has not generated those files.
+These are documented capabilities and workflow examples, not a hands-on comparison of every editor. The completed production route used Playwright plus FFmpeg.

@@ -173,7 +173,7 @@ def test_research_requires_real_production_area_on_legacy_boards():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("always_invalid", [False, True])
-@pytest.mark.parametrize("extract_status", [200, 429, 401])
+@pytest.mark.parametrize("extract_status", [200, 402, 429, 401])
 async def test_invalid_research_quantity_is_repaired_without_repeating_retrieval(monkeypatch, always_invalid, extract_status):
     import json
     import httpx
@@ -183,6 +183,7 @@ async def test_invalid_research_quantity_is_repaired_without_repeating_retrieval
     from google.genai import types
     from parallel import AuthenticationError, RateLimitError
     from sceneatlas import agent
+    from sceneatlas.research import ParallelCreditsExhausted
 
     task = {"run": {"_id": "run", "kind": "research", "targetId": "scene"}, "entities": [
         {"_id": "scene", "kind": "scene", "data": {"kind": "scene", "setting": "Beach", "needs": ["Open sand"], "candidateCount": 1}},
@@ -191,7 +192,7 @@ async def test_invalid_research_quantity_is_repaired_without_repeating_retrieval
     model_calls, searches, extractions = [], [], []
     source_url = "https://film.ca.gov/state-permits/"
     search_evidence = {"provider": "parallel", "searchId": "search_test", "retrievedAt": 1, "results": [{"url": source_url, "title": "Official", "excerpt": "Observed search evidence"}]}
-    extracted_evidence = {"results": [{"url": source_url, "title": "Official", "excerpts": ["Observed page evidence"]}], "errors": []}
+    extracted_evidence = {"extractId": "extract_test", "retrievedAt": 2, "requestedUrls": [source_url], "results": [{"url": source_url, "title": "Official", "excerpts": ["Observed page evidence"]}], "errors": []}
 
     class Backend:
         def __init__(self, *_):
@@ -207,6 +208,8 @@ async def test_invalid_research_quantity_is_repaired_without_repeating_retrieval
             return search_evidence
         assert self.name == "parallel_extract"
         extractions.append(args)
+        if extract_status == 402:
+            raise ParallelCreditsExhausted("All configured Parallel keys have insufficient available credits")
         if extract_status != 200:
             response = httpx.Response(extract_status, request=httpx.Request("POST", "https://api.parallel.ai/v1/extract"))
             error_type = RateLimitError if extract_status == 429 else AuthenticationError
@@ -249,9 +252,17 @@ async def test_invalid_research_quantity_is_repaired_without_repeating_retrieval
     assert "Los Angeles County" in searches[0]["objective"]
     assert extractions == [{"urls": [source_url]}]
     assert task["searchEvidence"] == search_evidence
+    traces = [event.actions.state_delta["research"] for event in events if event.actions.state_delta.get("research")]
+    assert [(trace["operation"], trace["phase"]) for trace in traces] == [
+        ("search", "request"), ("search", "complete"), ("extract", "request"), ("extract", "complete" if extract_status == 200 else "failed")]
+    assert traces[0]["objective"] == searches[0]["objective"]
+    assert traces[1]["requestId"] == "search_test" and traces[1]["retrievedAt"] == 1 and traces[1]["cached"] is False
+    assert traces[2]["urls"] == [source_url]
     if extract_status == 200:
         assert task["extractedEvidence"] == extracted_evidence
-    elif extract_status == 429:
+        assert traces[3]["requestId"] == "extract_test" and traces[3]["retrievedAt"] == 2 and traces[3]["cached"] is False
+        assert traces[3]["urls"] == [source_url]
+    elif extract_status in {402, 429}:
         assert task["extractedEvidence"]["results"] == []
         assert "using retrieved search excerpts" in task["extractedEvidence"]["errors"][0]
         assert any(e.actions.state_delta.get("activity") == "Page extraction unavailable · reviewing search excerpts" for e in events)

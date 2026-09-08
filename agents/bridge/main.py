@@ -94,8 +94,31 @@ def create_task(payload: Dispatch) -> str:
 def _activity(event: dict[str, Any]) -> tuple[str | None, str | None]:
     state = (event.get("actions") or {}).get("state_delta") or (event.get("actions") or {}).get("stateDelta") or {}
     activity = state.get("activity")
-    provider_id = state.get("searchId") or state.get("parallelSearchId")
+    provider_id = state.get("providerRequestId") or state.get("searchId") or state.get("parallelSearchId")
     return (activity if isinstance(activity, str) else None, provider_id if isinstance(provider_id, str) else None)
+
+
+def _research(event: dict[str, Any]) -> dict[str, Any] | None:
+    """Forward bounded coordinator trace fields; never tool arguments or raw responses."""
+    state = (event.get("actions") or {}).get("state_delta") or (event.get("actions") or {}).get("stateDelta") or {}
+    trace = state.get("research")
+    if not isinstance(trace, dict) or trace.get("kind") != "research":
+        return None
+    if trace.get("operation") not in ("search", "extract") or trace.get("phase") not in ("request", "complete", "failed"):
+        return None
+    safe: dict[str, Any] = {key: trace[key] for key in ("kind", "operation", "phase")}
+    for key, limit in (("objective", 5000), ("requestId", 200), ("error", 600)):
+        if isinstance(trace.get(key), str):
+            safe[key] = trace[key][:limit]
+    for key, count, limit in (("queries", 4, 500), ("urls", 5, 2000)):
+        if isinstance(trace.get(key), list):
+            safe[key] = [value[:limit] for value in trace[key][:count] if isinstance(value, str)]
+    for key in ("retrievedAt", "resultCount"):
+        if type(trace.get(key)) is int and trace[key] >= 0:
+            safe[key] = trace[key]
+    if type(trace.get("cached")) is bool:
+        safe["cached"] = trace["cached"]
+    return safe
 
 
 def _result(event: dict[str, Any]) -> dict[str, Any] | None:
@@ -179,6 +202,7 @@ async def execute(payload: Dispatch) -> None:
                 if event.get("errorMessage"):
                     raise RuntimeError(str(event["errorMessage"])[:4000])
                 activity, provider_id = _activity(event)
+                research = _research(event)
                 result = _result(event)
                 if result is not None:
                     final = result
@@ -188,6 +212,8 @@ async def execute(payload: Dispatch) -> None:
                     progress = {"sequence": sequence, "activity": activity}
                     if provider_id:
                         progress["providerId"] = provider_id
+                    if research:
+                        progress["research"] = research
                     accepted = await backend.post("event", progress)
                     if accepted.get("accepted") is False:
                         return

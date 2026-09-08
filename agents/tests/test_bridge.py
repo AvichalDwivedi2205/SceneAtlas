@@ -72,6 +72,10 @@ def test_progress_without_search_id_omits_optional_callback_field(monkeypatch, r
     class Remote:
         async def async_stream_query(self, **kwargs):
             yield {"actions": {"state_delta": {"activity": "Reading screenplay"}}}
+            yield {"actions": {"stateDelta": {"activity": "Reading selected source pages", "providerRequestId": "extract_observed", "research": {
+                "kind": "research", "operation": "extract", "phase": "complete", "requestId": "extract_observed", "retrievedAt": 123, "cached": False, "resultCount": 2,
+                "apiKey": "must-not-leave-runtime", "rawResponse": {"unexpected": "content"},
+            }}}}
             if remote_failure:
                 raise remote_failure
             yield {"content": {"parts": [{"text": json.dumps({"sceneatlasResult": {"message": "done"}})}]}}
@@ -101,6 +105,10 @@ def test_progress_without_search_id_omits_optional_callback_field(monkeypatch, r
     assert ticked_while_loading == [True]
     progress = next(item for item in sent if item["activity"] == "Reading screenplay")
     assert "providerId" not in progress
+    research = next(item for item in sent if item["activity"] == "Reading selected source pages")
+    assert research["providerId"] == "extract_observed"
+    assert research["research"] == {"kind": "research", "operation": "extract", "phase": "complete", "requestId": "extract_observed", "retrievedAt": 123, "cached": False, "resultCount": 2}
+    assert "must-not-leave-runtime" not in json.dumps(sent)
     assert sent[-1]["status"] == ("failed" if remote_failure else "complete")
     if remote_failure:
         assert "ReadTimeout" in sent[-1]["detail"]
@@ -125,3 +133,19 @@ async def test_heartbeat_does_not_cancel_slow_provider_and_closes_on_cancellatio
     assert events.count(None) >= 2
     assert events[-1] == {"result": "event after several ticks"}
     assert closed == [True]
+
+
+def test_research_trace_is_bounded_and_rejects_invalid_shapes():
+    event = {"actions": {"state_delta": {"research": {
+        "kind": "research", "operation": "search", "phase": "request", "objective": "a" * 9000,
+        "queries": ["q" * 600] * 10, "urls": ["https://example.com/" * 200] * 10,
+        "apiKey": "hidden", "rawResponse": "hidden", "retrievedAt": True, "cached": "false", "resultCount": -1,
+    }}}}
+    trace = main._research(event)
+    assert len(trace["objective"]) == 5000
+    assert len(trace["queries"]) == 4 and len(trace["queries"][0]) == 500
+    assert len(trace["urls"]) == 5 and len(trace["urls"][0]) == 2000
+    assert not {"apiKey", "rawResponse", "retrievedAt", "cached", "resultCount"} & trace.keys()
+    event["actions"]["state_delta"]["research"]["operation"] = []
+    assert main._research(event) is None
+    assert main._research({}) is None

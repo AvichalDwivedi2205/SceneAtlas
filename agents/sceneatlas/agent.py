@@ -13,7 +13,7 @@ from google.adk.tools import FunctionTool, ToolContext
 from google.genai import types
 from pydantic import BaseModel, Field, ValidationError as ModelValidationError
 from .backend import Backend
-from .research import search_sources, parallel_extract, normalize_sources, provider_failure, research_request
+from .research import search_sources, parallel_extract, normalize_sources, provider_failure, research_request, EXTRACT_OBJECTIVE
 from .result_schema import workflow_schema, breakdown_schema
 from .screenplay import extract_pages, index_scenes, selected_scenes, scene_batches, batch_key, validate_enrichment, assemble_scenes
 
@@ -234,21 +234,45 @@ class SceneAtlasAgent(BaseAgent):
             target=next(e for e in task["entities"] if e["_id"]==task["run"]["targetId"])
             answers=[e["data"] for e in task["entities"] if e["kind"]=="question" and e["data"]["resolution"]=="answered"]
             objective, queries = research_request(target["data"], answers)
-            yield Event(invocation_id=ctx.invocation_id, author=self.name, actions=EventActions(state_delta={"activity":"Researching locations"}))
+            def research_progress(operation, phase, activity, **details):
+                trace = {"kind": "research", "operation": operation, "phase": phase,
+                         **{key: value for key, value in details.items() if value is not None}}
+                state = {"activity": activity, "research": trace}
+                if trace.get("requestId"):
+                    state["providerRequestId"] = trace["requestId"]
+                return Event(invocation_id=ctx.invocation_id, author=self.name, actions=EventActions(state_delta=state))
+            yield research_progress("search", "request", "Researching locations", objective=objective, queries=queries)
             call_id=f"research-{task['run']['_id']}"
             yield Event(invocation_id=ctx.invocation_id, author=self.name,content=types.Content(parts=[types.Part(function_call=types.FunctionCall(id=call_id,name="search_sources",args={"objective":objective,"queries":queries}))]))
-            evidence=await FunctionTool(search_sources).run_async(args={"objective":objective,"queries":queries},tool_context=ToolContext(ctx,function_call_id=call_id))
+            try:
+                evidence=await FunctionTool(search_sources).run_async(args={"objective":objective,"queries":queries},tool_context=ToolContext(ctx,function_call_id=call_id))
+            except Exception as error:
+                reason = provider_failure(error) or provider_failure(error.__cause__) or "Parallel Search failed. Check agent credentials and configuration."
+                yield research_progress("search", "failed", "Location research unavailable", error=reason)
+                raise
             yield Event(invocation_id=ctx.invocation_id, author=self.name,content=types.Content(parts=[types.Part(function_response=types.FunctionResponse(id=call_id,name="search_sources",response=evidence))]))
             task["searchEvidence"]=evidence
-            yield Event(invocation_id=ctx.invocation_id, author=self.name,actions=EventActions(state_delta={"activity":"Checking source requirements","searchId":evidence["searchId"]}))
+            yield research_progress("search", "complete", "Checking source requirements", requestId=evidence["searchId"],
+                                    retrievedAt=evidence.get("retrievedAt"), cached=False, resultCount=len(evidence["results"]))
+            extract_urls = [r["url"] for r in evidence["results"][:5]]
+            yield research_progress("extract", "request", "Reading selected source pages", objective=EXTRACT_OBJECTIVE, urls=extract_urls)
             try:
-                task["extractedEvidence"]=await FunctionTool(parallel_extract).run_async(args={"urls":[r["url"] for r in evidence["results"][:5]]},tool_context=ToolContext(ctx))
+                task["extractedEvidence"]=await FunctionTool(parallel_extract).run_async(args={"urls":extract_urls},tool_context=ToolContext(ctx))
             except Exception as error:
                 reason = provider_failure(error)
                 if not reason:
+                    yield research_progress("extract", "failed", "Source extraction unavailable", error="Parallel Extract failed. Check agent credentials and configuration.")
                     raise
                 task["extractedEvidence"] = {"results": [], "errors": [f"{reason}; using retrieved search excerpts."]}
-                yield Event(invocation_id=ctx.invocation_id, author=self.name,actions=EventActions(state_delta={"activity":"Page extraction unavailable · reviewing search excerpts"}))
+                yield research_progress("extract", "failed", "Page extraction unavailable · reviewing search excerpts", error=f"{reason}; using retrieved search excerpts.")
+            else:
+                extracted = task["extractedEvidence"]
+                retrieved = extracted.get("retrievedAt")
+                extract_errors = extracted.get("errors", [])
+                yield research_progress("extract", "complete" if retrieved or extracted.get("results") else "failed", "Reviewing source evidence",
+                                        requestId=extracted.get("extractId"), retrievedAt=retrieved, cached=False if retrieved else None,
+                                        urls=extracted.get("requestedUrls"), resultCount=len(extracted.get("results", [])),
+                                        error=f"{len(extract_errors)} source pages could not be extracted; available search excerpts remain attached." if extract_errors else None)
         desired={"ingest":["script","question"],"scenes":["scene","question"],"research":["location","question"],"requirements":["location","question"],"schedule":["question"]}.get(kind,["scene","plan","question","note"])
         task["entitySchemas"]=[s for s in CONTRACT.get("oneOf",CONTRACT.get("anyOf",[])) if s.get("properties",{}).get("kind",{}).get("const") in desired]
         # Keep model context bounded and avoid handing credentials or transport details to the model.
@@ -281,9 +305,11 @@ class SceneAtlasAgent(BaseAgent):
             content,manifest=await asyncio.to_thread(build_packet,task)
             asset_id=await backend.artifact(content,"sceneatlas-preparation-packet.pdf","application/pdf")
             manifest_id=await backend.artifact(json.dumps(manifest,indent=2).encode(),"sceneatlas-manifest.json","application/json")
-            import time
+            from datetime import datetime
             result["packet"]={"kind":"packet","planId":task["run"]["targetId"],"assetId":asset_id,"manifestAssetId":manifest_id,
-                "filename":"sceneatlas-preparation-packet.pdf","builtAt":int(time.time()*1000),"unresolved":manifest["unresolved"],"documentStatus":"draft","externalStatus":"not_submitted"}
+                "filename":"sceneatlas-preparation-packet.pdf","builtAt":int(datetime.fromisoformat(manifest["generatedAt"]).timestamp()*1000),"unresolved":manifest["unresolved"],"documentStatus":"draft","externalStatus":"not_submitted",
+                "sourceVersion":manifest["sourceVersion"],"sourcePlanRevision":manifest["sourcePlanRevision"],
+                "sourceScheduleRevision":manifest["sourceScheduleRevision"],"includedSceneIds":manifest["scope"]["includedSceneIds"]}
         yield Event(invocation_id=ctx.invocation_id, author=self.name,content=types.Content(role="model",parts=[types.Part(text=json.dumps({"sceneatlasResult":result}))]))
 
     async def _screenplay(self, ctx, backend, task, pages):

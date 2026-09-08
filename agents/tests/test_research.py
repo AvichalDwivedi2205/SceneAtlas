@@ -175,6 +175,23 @@ def test_another_parks_official_form_does_not_establish_this_parks_rules():
     assert research.official_source_applies(evidence["results"][0], {"name": "Crystal Cove State Park"})
 
 
+@pytest.mark.parametrize("invalid_url", ["https://example.com/beach-guide", "https://film.ca.gov/not-returned"])
+def test_requirement_citation_repair_identifies_exact_supported_source(invalid_url):
+    official_url = "https://film.ca.gov/state-permits/state-parks-beaches/"
+    evidence = {"results": [
+        {"url": official_url, "title": "State parks requirements", "excerpt": "Official guidance"},
+        {"url": "https://example.com/beach-guide", "title": "Visitor guide", "excerpt": "A visitor description"},
+    ], "searchId": "search-repair", "retrievedAt": 200}
+    location = {"name": "Point Dume State Beach", "sources": [], "costs": [], "requirements": [
+        {"title": "Filming permit", "status": "sourced", "sources": [{"url": invalid_url}]}]}
+    with pytest.raises(ValueError, match="exact observed URL") as error:
+        research.normalize_sources({"locations": [location]}, evidence)
+    assert official_url in str(error.value)
+    assert invalid_url in str(error.value)
+    assert "unresolved with sources=[]" in str(error.value)
+    assert location["requirements"][0]["status"] == "sourced"  # Rejected draft was not silently accepted.
+
+
 @pytest.mark.asyncio
 async def test_extract_uses_parallel_sdk_and_preserves_partial_results(monkeypatch):
     requests = []

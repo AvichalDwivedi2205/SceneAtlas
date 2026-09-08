@@ -60,7 +60,7 @@ No external booking, filing, payments or communications. Prepared documents are 
 STAGES = {
  "ingest": "Read page-numbered screenplay. Return script summary with filename/pageCount/assetId provided, sceneCount as observed. Ask for any material ambiguity that prevents scene breakdown (blocks=['scenes']). Also ask permitted search area (blocks=['research']), crew size and real equipment/activities (blocks=['requirements']). Do not generate scenes yet. If no breakdown ambiguity, ask one scene_scope confirmation with suggestions ['Entire screenplay','Selected scenes']; blocks=['scenes']. Never infer real production choices.",
  "scenes": "Generate complete editable scenes from supplied page text and confirmed scene_scope. Preserve exact excerpts and correct source page spans. Scene durations remain null with unknown basis. Defaults: candidateCount=3, ranking='creative', windows=[]. Ask local material location questions only when needed, with blocks=['research']. Every scene must reference actual script text. No research in this stage.",
- "research": "Use retrieved evidence to return at most target scene's candidateCount real suitable locations. Each location includes name,address,description,creativeFit,restrictions,authority,sources,costs,requirements,sceneIds,rejected=false,availability='unverified'. Hard constraints precede fit ranking. The confirmed search_area is a geographic boundary: exclude candidates outside it, regardless of creative fit. Verify candidate locality from retrieved evidence; an unrelated district page is not proof of local suitability. Return fewer candidates rather than pad results. If evidence cannot establish a material hard constraint, disclose the gap and omit unsuitable candidates. Ask only whether the producer wants to change their constraint; never ask them to supply an unverified public fact. Monetary amounts use minor currency units. Each cost needs id,label,amountMinor,currency,unit,quantity,basis,coverageKey,coverageReason,assumptions. Missing fees are unknown/null. Cost estimates are permitted only when task.feeEstimatesAllowed is true. Otherwise all unquoted or assumed fee amounts must be unknown/null; time estimates and budget caps do not authorize estimated fees. Shared coverage needs evidence. Official sourced requirements must use exact observed film.ca.gov or parks.ca.gov URLs applicable to the named location. If applicable official guidance was not retrieved, return requirements=[] or unresolved requirements with sources=[], no formUrl and attachments=[]. Other jurisdictions are unsupported; show unresolved items without presenting visitor or city pages as supported state-permit requirements. Every requirement has title,detail,authority,status,sources,attachments,applicableFacts,externalStatus='unverified'. If existing locked location is incompatible, populate lockConflicts with scene ID and explain. Do not unlock anything.",
+ "research": "Use retrieved evidence to return at most target scene's candidateCount real suitable locations. Each location includes name,address,description,creativeFit,restrictions,authority,sources,costs,requirements,sceneIds,rejected=false,availability='unverified'. Hard constraints precede fit ranking. Saved producer flexibility overrides optional screenplay details; do not ask again whether an already-optional bench or background detail is essential. The confirmed search_area is a geographic boundary: exclude candidates outside it, regardless of creative fit. Verify candidate locality from retrieved evidence; an unrelated district page is not proof of local suitability. Return fewer candidates rather than pad results. If evidence cannot establish a material hard constraint, disclose the gap and omit unsuitable candidates. Ask only whether the producer wants to change their constraint; never ask them to supply an unverified public fact. Monetary amounts use minor currency units. Each cost needs id,label,amountMinor,currency,unit,quantity,basis,coverageKey,coverageReason,assumptions. Missing fees are unknown/null. Cost estimates are permitted only when task.feeEstimatesAllowed is true. Otherwise all unquoted or assumed fee amounts must be unknown/null; time estimates and budget caps do not authorize estimated fees. Shared coverage needs evidence. Official sourced requirements must use exact observed film.ca.gov or parks.ca.gov URLs applicable to the named location. If applicable official guidance was not retrieved, return requirements=[] or unresolved requirements with sources=[], no formUrl and attachments=[]. Other jurisdictions are unsupported; show unresolved items without presenting visitor or city pages as supported state-permit requirements. Every requirement has title,detail,authority,status,sources,attachments,applicableFacts,externalStatus='unverified'. If existing locked location is incompatible, populate lockConflicts with scene ID and explain. Do not unlock anything.",
  "requirements": "Refresh supplied selected location's official requirements for confirmed crew, equipment and activities. Return exactly one location entity for the selected target, with updated requirements/costs and its exact existing name and sceneIds. Do not return other locations from the context or perform candidate discovery. Supported official pilot uses observed film.ca.gov and parks.ca.gov evidence. Anything unverified stays unresolved or unsupported. Ask only missing producer-owned production facts or decisions with blocks=['requirements'], such as intended crew, equipment, filming activities or an explicitly permitted cost estimate. A park's fee amount, permit category, simple/complex classification, site-visit rule, notice period, availability or approval is an external authority fact, not a missing production activity. Never ask the producer to determine those facts from incomplete sources. Keep missing fees unknown/null and authority facts in unresolved requirements with externalStatus='unverified'. Do not borrow another district's rate or assume a classification. A preparation draft can complete with these explicit external follow-ups; it does not authorize filming.",
  "schedule": "Explain the supplied deterministic proposed schedule and conflicts. Do not invent or change schedule rows. Missing inputs need focused questions owned by target plan, with blocks=['schedule']. Explain feasible alternatives for conflicts without relaxing hard constraints or locked location choices. Return explanation as message.",
  "chat": "Answer within active scope using supplied records and evidence. For any requested changes return proposals {targetId,data,summary}, retaining all unedited fields. Ask about ambiguous cross-branch scope or unsupported rules. Do not promise unsupported constraints will be enforced. You may propose scene durations/windows, scene needs/candidateCount/ranking, question answers or plan settings already represented in the schema. Never update data silently.",
@@ -182,6 +182,22 @@ def validate_requirements_questions(result: dict):
                 "activities or decisions may remain in questions."
             )
 
+def validate_public_feature_questions(result: dict):
+    """Missing on-site evidence is a scout follow-up, not a producer decision."""
+    for question in result.get("questions", []):
+        data = question["data"]
+        prompt = data.get("prompt", "").lower()
+        feature = re.search(r"\b(bench|benches|overlook|bluff|bay view|coastal view|rocky path|accessible path)\b", prompt)
+        confirmation = re.search(r"^(does|do)\b.*\b(have|offer|provide|feature)\b|^(is there|are there|can you confirm|could you verify|do you know)\b", prompt)
+        decision = re.search(r"\b(essential|flexible|flexibility|acceptable|prefer|priority|willing|your crew|your production|your team|your actors)\b|^(do you|does your|do we)\b", prompt)
+        if feature and confirmation and not decision:
+            raise ValueError(
+                "This question asks the producer to verify an external location feature. Remove that question. "
+                "Keep the missing feature explicitly unverified in creativeFit/restrictions for a scout check. "
+                "Respect saved producer flexibility; do not reimpose optional screenplay details as hard constraints. "
+                "If a real hard constraint cannot be supported, omit that candidate. Ask only which producer constraint to change."
+            )
+
 class SceneAtlasAgent(BaseAgent):
     def __init__(self):
         # This schema is small enough to retain every generation constraint.
@@ -192,7 +208,7 @@ class SceneAtlasAgent(BaseAgent):
                     before_model_callback=isolate_model_input,
                     disallow_transfer_to_parent=True, disallow_transfer_to_peers=True,
                     generate_content_config=types.GenerateContentConfig(temperature=0.15, max_output_tokens=12000 if kind == "scenes" else 24000,
-                        thinking_config=types.ThinkingConfig(thinking_budget=1024),
+                        thinking_config=types.ThinkingConfig(thinking_budget=4096 if kind in {"research", "requirements"} else 1024),
                         response_mime_type="application/json", response_json_schema=scene_shape if kind == "scenes" else workflow_schema(kind)))
                     for kind in STAGES]
         super().__init__(name="sceneatlas", sub_agents=specialists)
@@ -331,8 +347,9 @@ class SceneAtlasAgent(BaseAgent):
                 question["ownerId"]=task["run"].get("targetId")
                 question.pop("sceneNumber",None)
             validate_new_questions(result, task["entities"])
-            if kind == "requirements":
+            if kind in {"research", "requirements"}:
                 validate_requirements_questions(result)
+                validate_public_feature_questions(result)
             if kind in {"research","requirements"}:
                 target=next(e for e in task["entities"] if e["_id"]==task["run"]["targetId"])
                 if kind == "requirements":

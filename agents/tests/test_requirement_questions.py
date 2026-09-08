@@ -16,13 +16,28 @@ from sceneatlas import agent
     "What is your budget for permit fees?",
     "Do you have an actual quoted location fee to attach?",
     "Would you accept a monitor contingency estimate?",
+    "Is a wooden bench essential, or may the actors stand?",
+    "Do you have a bench prop to bring?",
+    "Does your crew need an accessible path?",
 ])
 def test_producer_owned_inputs_remain_questions(prompt):
     question = agent.intake_question("production_input", prompt, "Producer decision", ["requirements"])
     result = {"questions": [question]}
     before = copy.deepcopy(result)
     agent.validate_requirements_questions(result)
+    agent.validate_public_feature_questions(result)
     assert result == before
+
+
+@pytest.mark.parametrize("prompt", [
+    "Is there a wooden bench at the coastal overlook?",
+    "Can you confirm Leo Carrillo offers a coastal view with a bench?",
+])
+def test_public_feature_questions_remain_scout_followups(prompt):
+    result = {"questions": [agent.intake_question("site_feature", prompt, "No retrieved evidence", ["research"])]}
+    with pytest.raises(ValueError, match="scout check"):
+        agent.validate_public_feature_questions(result)
+    assert result["questions"][0]["data"]["answer"] is None
 
 
 @pytest.mark.asyncio
@@ -30,6 +45,7 @@ def test_producer_owned_inputs_remain_questions(prompt):
 @pytest.mark.parametrize("key,prompt", [
     ("park_district_review_fee", "What is the specific review fee for commercial filming at this park?"),
     ("park_activity_level", "Is filming at this park considered 'simple' or 'complex'?"),
+    ("leo_carrillo_overlook_bench", "Does Leo Carrillo State Park have a coastal overlook with a wooden bench and bay view suitable for Scene 3?"),
     ("multiple_locations", None),
     ("different_location", None),
 ])

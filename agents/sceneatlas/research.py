@@ -262,12 +262,11 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
                     applicable_urls = [url for url in sorted(observed_urls) if len(url) <= 1000
                                        and official_source_applies(discovered.get(url, saved.get(url, {})), location)][:8]
                     raise ValueError(
-                        f"Requirement {req.get('title', '')[:160]!r} cites unsupported source {source['url'][:1000]!r}. "
                         "A supported requirement must cite retrieved official California evidence using the exact observed URL. "
-                        f"Applicable observed URLs: {json.dumps(applicable_urls)}. "
-                        "If none supports this requirement, keep it unresolved with sources=[], no formUrl and attachments=[], "
-                        "and state that the authority must confirm it; or omit the unsupported requirement. "
-                        "Third-party location references cannot establish an official filming requirement.")
+                        "If none applies, keep it unresolved with sources=[], no formUrl and attachments=[], "
+                        "and state that the authority must confirm it; or omit it. "
+                        f"Rejected citation: {source['url'][:1000]!r}. "
+                        f"Requirement: {req.get('title', '')[:160]!r}. Applicable observed URLs: {json.dumps(applicable_urls)}.")
                 observed_source(source)
                 if not official_source_applies(source, location):
                     inapplicable.append(source)

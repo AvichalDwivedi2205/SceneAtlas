@@ -32,9 +32,24 @@ Convex is authoritative for boards, memberships, entity revisions, dependencies,
 - Explicit clarification checkpoint before scene and research stages.
 - Web research uses Parallel Search and Extract only. Up to four configured keys are tried in order when Parallel reports insufficient credit (HTTP 402). Search and Extract share exhausted-key cooldowns within each agent process; authentication, rate limits, and service failures remain visible. Request IDs, retrieval times, and cache status stay attached to sources. Returned URLs are allowlisted into agent results; official pilot requirements need CFC state-permit guidance or the named park’s own official page. Other park references remain unverified.
 - Costs preserve published, quoted, estimated, and unknown states. Modeled rates and assumed quantities remain estimates. Shared charges deduplicate by documented coverage key, with conflicting units/quantities kept visible. Other currencies stay outside plan totals until conversion is supplied.
-- Budget and Creative plans keep their own selections, locks, constraints, totals, and schedules.
+- Budget and Creative plans keep their own included scenes, selections, locks, constraints, totals, and schedules. An absent scene-scope field retains legacy all-scenes behavior; an explicitly empty selection remains empty. Excluded scenes stay on the canvas and retain their saved location choices.
+- A persistent workflow guide and scene navigator show actual progress, included counts, missing locations, unanswered questions, timing blockers and stale work.
+- Ready plans can generate their confirmed shooting orders concurrently, with separate activity and targeted retries. A cap is not a claim of budget compliance: unquoted items remain visible.
+- Research details show saved Search/Extract requests, execution times, request references and source excerpts. Candidate comparisons use only returned evidence.
 - Material edits create a preview, mark dependency outputs stale, regenerate into staged results, apply only against unchanged revisions, and support conflict-safe undo.
-- Preparation PDF and JSON manifest include chosen assignments, proposed timing, cost bases, official source links, attachment checklists, open questions, and record versions. Status always remains draft / not submitted.
+- Preparation PDF and JSON manifest include chosen assignments, proposed timing, cost bases, official source links, attachment checklists, open questions, and record versions. Authenticated Open PDF and Download PDF use the same private asset route. Documents show included scenes, source plan/schedule revisions and current or historical status. Missing production inputs block export; external facts can remain explicitly unverified in a preparation draft. Status always remains draft / not submitted.
+
+## Planning a shoot day
+
+1. Upload the complete screenplay as a text-based PDF or plain text (up to 50 MB), confirm production inputs, and generate scenes.
+2. Open **Scenes** or **Scene navigator**, then **Choose scenes for this shoot plan**. Choose selected-scene mode, check the scenes, review the scope change, and save it. Repeat for the other plan. Scene numbers, headings and page ranges remain searchable across the full screenplay.
+3. In each plan’s settings, confirm dates, setup/move times, currency and priorities. Enter a fixed cap for Budget; Creative can remain uncapped. Confirm each included scene’s duration and time window.
+4. Find filming locations, inspect the actual evidence and returned candidates, then select and optionally lock each plan’s choices. Review applicable requirements and answer required producer questions.
+5. Open **Schedule** and choose **Generate both shooting schedules** when both plans are ready. This calculates an order from confirmed choices; it does not automatically choose locations or guarantee a global optimum. Compare actual costs, missing quotes, dates, moves and blockers, then choose the plan to carry forward.
+6. Edit the chosen plan’s start time. Review the previous/proposed input, **Save new start time**, **Generate updated schedule**, inspect the staged rows and preserved decisions, then **Apply updated schedule**. The other plan remains independent. Undo checks revisions before restoring inputs and dependencies.
+7. Open **Preparation packet**. Resolve production-input blockers, prepare the draft, then **Open PDF** or **Download PDF**. The JSON manifest retains matching scope and source versions. After revisions, earlier documents are labeled historical until rebuilt.
+
+Shared source or location changes invalidate every affected plan. Scene timing changes leave reusable research intact. Larger regeneration batches retain pending work and drain it within the existing concurrency limit; failures preserve completed staged results for a targeted retry.
 
 ## Local development
 

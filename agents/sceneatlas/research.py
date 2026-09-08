@@ -126,18 +126,31 @@ async def parallel_search(objective: str, queries: list[str]) -> dict:
                          "excerpt": "\n".join(r.get("excerpts", []))[:6000]}
                         for r in data.get("results", [])[:8]]}
 
-def research_request(target: dict, answers: list[dict]) -> tuple[str, list[str]]:
+def research_request(target: dict, answers: list[dict], kind: str = "research") -> tuple[str, list[str]]:
     """Build a focused search without copying existing source excerpts into the request."""
     facts = {key: target[key] for key in ["name", "address", "setting", "needs", "interiorExterior", "timeOfDay", "windows"] if key in target}
     confirmed = [{"key": answer.get("key"), "answer": (answer.get("answer") or "")[:600]} for answer in answers[:12]]
-    objective = ("Research real filming locations and current official California state-property filming requirements. "
-                 "Do not assume availability or approval. Location/scene: " + json.dumps(facts) +
-                 ". Producer-confirmed inputs: " + json.dumps(confirmed))[:5000]
-    place = target.get("setting", target.get("name", ""))
     area = next((answer.get("answer") or "" for answer in answers if answer.get("key") == "search_area"), "")
-    return objective, [f"{place} {area} filming location"[:500],
-                       "site:film.ca.gov state permits requirements fees filming",
-                       "site:parks.ca.gov filming permit location fees"]
+    purpose = ("Find current official filming requirements for this exact selected location. Do not discover replacement locations."
+               if kind == "requirements" else
+               "Find real filming locations inside the producer's confirmed search area. Exclude locations outside that boundary, even when their physical features match.")
+    objective = (purpose + " Confirmed search area: " + area[:1200] +
+                 ". Do not assume availability or approval. Location/scene: " + json.dumps(facts) +
+                 ". Producer-confirmed inputs: " + json.dumps(confirmed))[:5000]
+    # Keep the geographic constraint in every discovery query. Generic statewide
+    # permit queries otherwise crowd out evidence about suitable local candidates.
+    area_query = area[:260]
+    if kind == "requirements":
+        place = target.get("name", "")[:140]
+        queries = [f"{place} {area_query} filming permit requirements",
+                   f"site:parks.ca.gov {place} {area_query} filming fees",
+                   f"site:film.ca.gov {place} state parks filming requirements"]
+    else:
+        place = target.get("setting", target.get("name", ""))[:140]
+        queries = [f"{area_query} {place} filming location",
+                   f"site:parks.ca.gov {area_query} {place}",
+                   f"{area_query} {place} filming access restrictions"]
+    return objective, [query[:500] for query in queries]
 
 def provider_failure(error: Exception) -> str | None:
     """Identify capacity and transient errors while preserving auth/config failures."""

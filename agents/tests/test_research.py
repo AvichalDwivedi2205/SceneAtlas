@@ -53,12 +53,27 @@ def test_requirements_search_retains_production_facts_without_old_page_text():
     objective, queries = research.research_request(
         {"name": "Point Dume State Beach", "address": "Malibu", "sources": [{"excerpt": "EXISTING_PAGE_TEXT" * 1000}]},
         [{"key": "search_area", "answer": "Los Angeles County"}, {"key": "production_activities", "answer": "Four people, handheld camera, no drones."}],
+        "requirements",
     )
     assert "Point Dume State Beach" in objective
     assert "Four people" in objective
     assert "EXISTING_PAGE_TEXT" not in objective
     assert len(objective) <= 5000
     assert all(len(query) <= 500 for query in queries)
+    assert all("Point Dume State Beach" in query for query in queries)
+    assert "Do not discover replacement locations" in objective
+
+
+def test_location_discovery_keeps_confirmed_area_in_every_query():
+    area = "Malibu, California, Los Angeles County"
+    objective, queries = research.research_request(
+        {"setting": "Rocky coastal path"},
+        [{"key": f"other_{i}", "answer": "Already confirmed"} for i in range(12)] +
+        [{"key": "search_area", "answer": area}],
+    )
+    assert area in objective
+    assert "Exclude locations outside that boundary" in objective
+    assert all(area in query and "Rocky coastal path" in query for query in queries)
 
 
 def test_requirements_refresh_preserves_saved_provenance_without_claiming_new_retrieval():

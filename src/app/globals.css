@@ -1905,7 +1905,7 @@ button:disabled {
 }
 .schedule-row span {
   font-size: 14px;
-  color: var(--ink);
+  color: var(--paper);
   font-variant-numeric: tabular-nums;
 }
 .schedule-row h3 {

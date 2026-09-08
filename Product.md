@@ -155,18 +155,43 @@ Export the chosen branch as a preparation packet containing:
 
 Populate one supported official form where feasible, leaving missing fields and signatures unfilled. Government filing, payments, signatures, and approvals are outside the MVP.
 
-## 5. Technology responsibilities
+## 5. Required technology, deployment, and delivery
 
-- **Gemini and the Google Cloud agent platform required by the event:** screenplay understanding, clarification, natural-language rule interpretation, planning explanations, and workflow orchestration.
-- **Parallel Search API:** actual runtime discovery of locations, authorities, current requirements, and supporting evidence. Search must influence the displayed recommendations and requirements.
+### A. Required architecture
+
+**SceneAtlas must use Google Agent Development Kit (ADK) for its agentic workflow and deploy the agent backend on Google Cloud.** ADK is our required implementation choice for the Gemini and Google Cloud Agent Builder / Agent Platform integration.
+
+- **Google ADK:** implement the coordinator, specialist agents, tool calls, session context, and workflow execution. Coordinate script breakdown, clarification, location research, requirement checks, plan comparison, and packet preparation through ADK.
+- **Gemini on Google Cloud:** power screenplay understanding, clarification, natural-language rule interpretation, and planning explanations through actual model calls from the deployed agents.
+- **Google Cloud agent deployment:** use Google Cloud's managed Agent Runtime as the deployment target for the ADK backend. The hosted web application must call this cloud deployment; hosting only the UI does not meet this architecture requirement. Follow the [ADK deployment guide](https://adk.dev/deploy/agent-runtime/).
+- **Parallel Search API — primary web search provider:** actual runtime discovery of locations, authorities, current requirements, and supporting evidence. All new web research starts with Parallel, and its results must influence the displayed recommendations and requirements.
 - **Parallel Extract, where useful:** read relevant public pages and PDFs found during research.
 - **Application logic:** preserve workspace state and node relationships, original questions and answers, confirmed rules, and branch state; calculate comparable costs, check constraints, track affected outputs, and keep regeneration, revisions, and exports consistent.
 
+The ADK workflow must pause the relevant branch for a material clarification, save the answer, and resume using the confirmed inputs. Run independent scene research and the two planning branches concurrently where their dependencies permit. Map actual agent/tool events to the canvas states defined in Section 4.B1. Revisions rerun affected work while preserving valid answers and unrelated outputs.
+
+Keep credentials on the backend, configure the deployment's service identity and permissions, and document its project, region, service endpoint, dependencies, and deployment steps. Retain request/run identifiers and execution logs sufficient to demonstrate a real Gemini call and a real Parallel Search call from the deployed workflow.
+
 Show progressive research results and clear failures. Reuse shared research across branches; label cached evidence and its timestamp. A failed lookup leaves an explicit unresolved item.
 
-The track requires runtime Parallel Search use alongside the required Google technology. [Parallel track requirements](https://agentic-cinema.devpost.com/details/parallel-resources), [official rules](https://agentic-cinema.devpost.com/rules), [Search documentation](https://docs.parallel.ai/search/search-quickstart), [Extract documentation](https://docs.parallel.ai/extract/extract-quickstart)
+Parallel Search must be imported/configured and called at runtime. An unused dependency, README mention, or Extract-only integration is insufficient. [Parallel integration requirements](https://agentic-cinema.devpost.com/details/parallel-resources), [Search documentation](https://docs.parallel.ai/search/search-quickstart), [Extract documentation](https://docs.parallel.ai/extract/extract-quickstart)
 
-Delivery includes a hosted English-language application, public source repository with an open-source license and run instructions, and a functioning-product demo of no more than three minutes.
+#### Web search reliability and backup provider
+
+**Parallel remains the primary provider. Exa Search is the planned backup for a future production release or an explicitly permitted deployment.** Exa can provide web search through its [Search API](https://exa.ai/docs/reference/search).
+
+### B. Delivery requirements
+
+- Build an original new project during **July 27–September 9, 2026**, rather than modifying or extending an existing project.
+- Provide a hosted web URL for evaluation. The application must run reliably and match its submitted description and demonstration.
+- Publish a public GitHub, GitLab, or Bitbucket repository with source, assets, setup/run instructions, and executable Google Cloud and Parallel integrations.
+- Include a complete, detectable root `LICENSE` using an OSI-approved license permitting commercial use.
+- Describe the features, technologies, data sources, findings, and lessons learned in English. The application must support English.
+- Provide a public YouTube or Vimeo demonstration, **at most three minutes**, in English or with English subtitles, showing the functioning product.
+- Complete the submission form, select the Parallel track, and list every eligible team member. Maximum team size: **four people**, with one representative.
+- Use authorized third-party tools, data, and assets; respect applicable licenses, privacy, and intellectual-property rights.
+- Submit by **September 9, 2026, 2:00 PM PDT — September 10, 2026, 2:30 AM IST**. Preserve the submitted version after the deadline.
+
 
 ## 6. Three-minute demonstration
 
@@ -183,6 +208,9 @@ Demo prices must come from researched fees, supplied quotes, or clearly labeled 
 
 ## 7. Acceptance criteria
 
+- The agent workflow runs through Google ADK on the deployed Google Cloud agent backend, with real Gemini and Parallel Search calls demonstrable from code and execution logs.
+- Parallel is the primary web search provider. Quota exhaustion, retry exhaustion, cached results, and any enabled Exa fallback remain visible and preserve source provenance; the submitted deployment keeps Exa disabled unless eligibility is confirmed.
+- The hosted application, public licensed repository, run/deployment instructions, and demonstration satisfy Section 5.B.
 - Creating and opening a workspace reveals an empty canvas with PDF drop and file-picker controls.
 - Upload shows the filename, ingestion transition, actual agent stages, and actionable failures before returning to the same workspace canvas.
 - One script node produces editable connected scene groups and two independently configurable plan outputs on the canvas.
@@ -205,7 +233,7 @@ Demo prices must come from researched fees, supplied quotes, or clearly labeled 
 
 ## 8. Judging focus and deferred work
 
-The official rubric weights technical implementation, design, potential impact, and idea quality equally. Demonstrate live research affecting decisions, a coherent canvas-to-export journey, a concrete production problem resolved, and an evidence-backed explanation of the tradeoff. [Judging rules](https://agentic-cinema.devpost.com/rules)
+The official rubric weights technical implementation, design, potential impact, and idea quality equally. Demonstrate live research affecting decisions, a coherent canvas-to-export journey, a concrete production problem resolved, and an evidence-backed explanation of the tradeoff.
 
 Defer generated films/storyboards, full crew and equipment budgeting, worldwide permitting, automatic submission or booking, real-time multiplayer editing, and a complete production scheduling system. Allocate remaining effort to research accuracy, clarification quality, readable comparisons, and reliable revisions.
 

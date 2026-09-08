@@ -37,6 +37,11 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .seg button{font-size:12.5px;color:var(--fg-3);padding:4px 11px;border-radius:8px}
 .seg button.on{background:rgba(255,255,255,.10);color:var(--fg);box-shadow:inset 0 1px 0 var(--hi)}
 .hidden{display:none!important}
+.prototype-label{font-size:10px;color:var(--fg-3);border:1px solid var(--line);padding:3px 7px;border-radius:6px}
+button:disabled{cursor:not-allowed;opacity:.45}
+.group-frame{position:absolute;pointer-events:none;border:1px dashed rgba(233,238,220,.18);border-radius:23px;background:rgba(233,238,220,.012)}
+.group-frame span{position:absolute;top:-12px;left:20px;padding:2px 10px;background:var(--ink-2);color:var(--fg-3);font-size:11px}
+.node{z-index:2}svg.wires{z-index:1}
 .flow-screen,.view-panel{position:relative;flex:1;overflow:auto;background-color:var(--ink-2);
   background-image:radial-gradient(rgba(233,238,220,.13) 1px,transparent 1px);background-size:26px 26px}
 .flow-inner{position:relative;z-index:2;width:min(1040px,calc(100% - 40px));margin:0 auto;padding:42px 0 100px}
@@ -176,7 +181,7 @@ svg.wires{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
 <div class="app">
   <header class="topbar">
     <button class="brand" id="brandHome"><i></i>SceneAtlas</button>
-    <span class="crumb" id="crumb">Workspaces</span>
+    <span class="crumb" id="crumb">Workspaces</span><span class="prototype-label">UI prototype · simulated data</span>
     <span class="sp"></span>
     <span class="chip clay hidden" id="openCount"><i class="dot clay"></i>3 open</span>
     <div class="seg hidden" id="viewTabs"><button class="on" data-view="canvas">Canvas</button><button data-view="schedule">Schedule</button><button data-view="packet">Packet</button></div>
@@ -233,8 +238,8 @@ svg.wires{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
         <div class="agent-step" data-step="0"><span class="agent-pip"></span><span><h4>Upload screenplay</h4><p>Waiting for coastal_short.pdf</p></span></div>
         <div class="agent-step" data-step="1"><span class="agent-pip"></span><span><h4>Read and structure script</h4><p>Identify headings, characters, props, timing, and production signals</p></span></div>
         <div class="agent-step" data-step="2"><span class="agent-pip"></span><span><h4>Find material unknowns</h4><p>Turn missing production decisions into clarification questions</p></span></div>
-        <div class="agent-step" data-step="3"><span class="agent-pip"></span><span><h4>Generate scene nodes</h4><p>Connect each scene to the script and its own question hub</p></span></div>
-        <div class="agent-step" data-step="4"><span class="agent-pip"></span><span><h4>Wait for answers</h4><p>No location search or schedule is started until required inputs are answered</p></span></div>
+        <div class="agent-step" data-step="3"><span class="agent-pip"></span><span><h4>Prepare script questions</h4><p>Attach production decisions to the script root</p></span></div>
+        <div class="agent-step" data-step="4"><span class="agent-pip"></span><span><h4>Wait for answers</h4><p>Answer script questions, then choose Generate scenes on the canvas</p></span></div>
       </div>
       <div class="flow-actions"><button class="btn pri hidden" id="continueCanvas">Open script questions</button><span class="note" id="agentStatus">Starting…</span></div>
     </div>
@@ -244,7 +249,7 @@ svg.wires{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
     <div class="world" id="world"><svg class="wires" id="wires"></svg></div>
 
     <div class="float tools">
-      <button class="on">Move</button><button>Select</button><button>Note</button><button>Link</button>
+      <button class="on" data-tool="move">Move</button><button data-tool="script">Script</button><button data-tool="scene1">Scene 1</button><button data-tool="scene2">Scene 2</button><button data-tool="scene3">Scene 3</button>
     </div>
     <div class="hint">Questions and saved answers stay connected to their source. A changed filter opens an impact preview before anything regenerates.</div>
 
@@ -283,16 +288,16 @@ svg.wires{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
         <div style="margin-top:13px"><div class="metric"><span class="muted">Estimated total</span><strong>$7,460</strong></div><div class="metric"><span class="muted">Shoot days</span><strong>2</strong></div><div class="metric"><span class="muted">Company moves</span><strong>1</strong></div></div>
         <div class="schedule-row"><strong>Day 1 · Leo Carrillo</strong><p>Scenes 1 + 2 · beach dialogue into dusk cliff wide</p></div>
         <div class="schedule-row"><strong>Day 2 · Stage 4 backlot</strong><p>Scene 3 · diner set · controlled night</p></div>
-        <button class="btn pri" style="margin-top:12px">Choose budget plan</button>
+        <button class="btn pri" data-plan="budget" style="margin-top:12px">Choose budget plan</button>
       </article>
       <article class="panel-card">
         <span class="chip brass">No budget cap</span><h2 style="margin-top:13px">Best creative fit</h2>
         <div style="margin-top:13px"><div class="metric"><span class="muted">Estimated total</span><strong>$10,940</strong></div><div class="metric"><span class="muted">Shoot days</span><strong>3</strong></div><div class="metric"><span class="muted">Company moves</span><strong>2</strong></div></div>
         <div class="schedule-row"><strong>Day 1 · El Matador</strong><p>Scene 1 · stronger cove geometry</p></div><div class="schedule-row"><strong>Day 2 · Point Mugu</strong><p>Scene 2 · clear west-facing cliff</p></div><div class="schedule-row"><strong>Day 3 · Rae’s Diner</strong><p>Scene 3 · practical neon interior</p></div>
-        <button class="btn" style="margin-top:12px">Choose creative plan</button>
+        <button class="btn" data-plan="creative" style="margin-top:12px">Choose creative plan</button>
       </article>
     </div>
-    <div class="panel-card" style="max-width:1100px;margin:16px auto 0"><label class="field-label" for="priorityInput">Describe what to optimize</label><div style="display:flex;gap:9px"><input class="text-input" id="priorityInput" value="Keep the beach scenes together, minimize company moves, and protect the dusk wide"><button class="btn pri" id="applyPriority">Re-rank plans</button></div><p class="note" style="margin-top:9px">Natural language becomes visible scheduling constraints. The agent asks if two priorities conflict.</p></div>
+    <div class="panel-card" style="max-width:1100px;margin:16px auto 0"><label class="field-label" for="priorityInput">Describe what to optimize</label><div style="display:flex;gap:9px"><input class="text-input" id="priorityInput" value="Keep the beach scenes together, minimize company moves, and protect the dusk wide"><button class="btn pri" id="applyPriority">Preview rules</button></div><p class="note" id="priorityRules" style="margin-top:9px">Natural language becomes visible scheduling constraints. The agent asks if two priorities conflict.</p><p class="note" style="margin-top:9px">Illustrative comparison snapshot · partial costs exclude unquoted parking and availability. Budget compliance is unconfirmed.</p></div>
   </section>
 
   <section class="view-panel hidden" id="packetView">
@@ -323,13 +328,18 @@ const state = {
     'hub-scene2': { q:'Only 2 of 5 candidates met this brief. What should I do?', opts:['Widen to 90 mi','Accept 2','Drop to 3'], k:'Search radius' },
     'hub-scene3': { q:'A practical diner or a dressed set? It changes the search and the permit.', opts:['Practical','Set','Not sure yet'], k:'Diner' }
   },
-  pendingChange:null
+  pendingChange:null,
+  scenesGenerated:true,
+  scriptQueue:[],
+  workspaceName:'Coastal short',
+  filename:'coastal_short.pdf',
+  selectedPlan:'budget'
 };
 
 const CORE = [
   { id:'script', x:820, y:60, w:380, dot:'brass', title:'coastal_short.pdf', sub:'18 pages · 7 scenes', tag:'Script root',
     body:`<div class="note">Script-wide questions and saved answers are connected on the right. Scenes inherit them without hiding the decision trail.</div>
-      <div class="chips" style="margin-top:11px"><button class="btn sm" data-focus-node="scene1">Scene 1</button><button class="btn sm" data-focus-node="scene2">Scene 2</button><button class="btn sm" data-focus-node="scene3">Scene 3</button><span class="chip">+4 scenes</span></div>` },
+      <div class="chips scene-index" style="margin-top:11px"><button class="btn sm" data-focus-node="scene1">Scene 1</button><button class="btn sm" data-focus-node="scene2">Scene 2</button><button class="btn sm" data-focus-node="scene3">Scene 3</button><span class="chip">+4 scenes</span></div><button class="btn pri hidden" id="generateScenes" style="margin-top:12px" disabled>Generate scenes</button>` },
   { id:'scene1', x:120, y:600, w:340, dot:'moss', title:'Scene 1 · Ext. beach', sub:'Day · dialogue · 2 pages',
     body:`<div class="row" style="padding-top:0"><span class="muted">Found</span><span>3 candidates</span></div>
       <div class="row"><span class="muted">Selected</span><span class="chip moss">Leo Carrillo</span></div>
@@ -378,6 +388,11 @@ const FLOW = [
 
 const vp=document.getElementById('vp'), world=document.getElementById('world'), wires=document.getElementById('wires');
 const els={}; let tx=0,ty=0,k=.8,selected=null,editing=null;
+const demoAnswers=JSON.parse(JSON.stringify(state.answers)), demoOpen=JSON.parse(JSON.stringify(state.open));
+const groupEls={};
+for(const owner of ['script','scene1','scene2','scene3']){
+  const frame=document.createElement('div');frame.className='group-frame';frame.innerHTML=`<span>${owner==='script'?'SCRIPT':owner.replace('scene','SCENE ')}</span>`;world.prepend(frame);groupEls[owner]=frame;
+}
 
 function makeNode(id,x,y,w,cls){
   const el=document.createElement('div');
@@ -406,6 +421,7 @@ function renderHub(h){
     <div class="nbody" data-body>
       ${q?`<p style="font-size:13px;line-height:1.5">${q.q}</p>
         <div class="chips" style="margin-top:11px">${q.opts.map(o=>`<button class="btn sm" data-act="answer" data-hub="${h.id}" data-val="${o}">${o}</button>`).join('')}</div>
+        <form class="free-answer" data-hub="${h.id}" style="display:flex;gap:7px;margin-top:10px"><input class="text-input" aria-label="Custom answer" placeholder="Or write your answer…" style="font-size:12px;padding:7px"><button class="btn sm" type="submit">Save</button></form>
         <p class="note" style="margin-top:10px">${q.deferred?'“Not sure yet” is saved, but this branch stays paused. Choose a production direction when ready.':'Your answer becomes a connected filter node you can change later.'}</p>`
       :`<p class="note">Nothing open. The answer nodes wired in below are the filters this ${h.owner==='script'?'project':'scene'} is running on.</p>`}
     </div>`;
@@ -413,6 +429,7 @@ function renderHub(h){
 HUBS.forEach(renderHub);
 
 function renderAnswers(){
+  for(const [id,el] of Object.entries(els)) if(el.classList.contains('ans')&&!state.answers[id]){el.remove();delete els[id]}
   for (const [id,a] of Object.entries(state.answers)){
     let el=els[id]; if(!el) el=makeNode(id,0,0,300,'ans');
     el.classList.toggle('editing',editing===id);
@@ -437,6 +454,48 @@ function layoutAnswers(){
       if(!el.dataset.moved){ el.style.left=x+'px'; el.style.top=y+'px'; y+=el.offsetHeight+12; }
     }
   }
+  if(!vp.classList.contains('hidden')){
+    const scriptBottom=Math.max(...['script','hub-script',...Object.keys(state.answers).filter(id=>state.answers[id].owner==='script')].map(id=>els[id].offsetTop+els[id].offsetHeight));
+    const sceneY=Math.max(720,scriptBottom+110);
+    for(const h of HUBS.filter(h=>h.owner!=='script')){
+      const scene=els[h.owner], hub=els[h.id];
+      if(!scene.dataset.moved)scene.style.top=sceneY+'px';
+      if(!hub.dataset.moved)hub.style.top=(scene.offsetTop+scene.offsetHeight+48)+'px';
+      let answerY=hub.offsetTop+hub.offsetHeight+26;
+      for(const [id,a] of Object.entries(state.answers).filter(([,a])=>a.owner===h.owner)){
+        const el=els[id];if(!el.dataset.moved){el.style.top=answerY+'px';answerY+=el.offsetHeight+12}
+      }
+      if(h.owner==='scene3'&&!els['loc-diner'].dataset.moved)els['loc-diner'].style.top=(answerY+45)+'px';
+    }
+    const branchBottom=Math.max(...Object.entries(els).filter(([id])=>/^scene|^hub-scene|^a_s/.test(id)).map(([,el])=>el.offsetTop+el.offsetHeight));
+    if(!els['loc-leo'].dataset.moved)els['loc-leo'].style.top=(branchBottom+80)+'px';
+    if(!els['req-leo'].dataset.moved)els['req-leo'].style.top=(els['loc-leo'].offsetTop+els['loc-leo'].offsetHeight+60)+'px';
+    const planY=Math.max(els['req-leo'].offsetTop+els['req-leo'].offsetHeight,els['loc-diner'].offsetTop+els['loc-diner'].offsetHeight)+130;
+    for(const id of ['plan-budget','plan-creative'])if(!els[id].dataset.moved)els[id].style.top=planY+'px';
+    if(!els.packet.dataset.moved)els.packet.style.top=(planY+310)+'px';
+  }
+  updateGroupFrames();
+}
+function updateGroupFrames(){
+  for(const h of HUBS){
+    const ids=[h.owner,h.id,...Object.keys(state.answers).filter(id=>state.answers[id].owner===h.owner)];
+    const members=ids.map(id=>els[id]).filter(el=>el&&!el.classList.contains('hidden'));
+    const frame=groupEls[h.owner];frame.classList.toggle('hidden',!members.length||!state.scenesGenerated&&h.owner!=='script');
+    if(!members.length)continue;
+    const left=Math.min(...members.map(e=>e.offsetLeft))-22,top=Math.min(...members.map(e=>e.offsetTop))-26;
+    const right=Math.max(...members.map(e=>e.offsetLeft+e.offsetWidth))+22,bottom=Math.max(...members.map(e=>e.offsetTop+e.offsetHeight))+22;
+    frame.style.cssText=`left:${left}px;top:${top}px;width:${right-left}px;height:${bottom-top}px`;
+  }
+}
+function syncGraphVisibility(){
+  for(const [id,el] of Object.entries(els)){
+    const scriptMember=id==='script'||id==='hub-script'||state.answers[id]?.owner==='script';
+    el.classList.toggle('hidden',!state.scenesGenerated&&!scriptMember);
+  }
+  const button=document.getElementById('generateScenes');
+  button.classList.toggle('hidden',state.scenesGenerated);button.disabled=!!state.open['hub-script'];
+  document.querySelector('.scene-index').classList.toggle('hidden',!state.scenesGenerated);
+  updateGroupFrames();drawWires();
 }
 
 function edgeList(){
@@ -465,7 +524,7 @@ function pathFor(A,B){
 }
 function drawWires(){
   wires.innerHTML=edgeList().map(([a,b,cls])=>
-    (els[a]&&els[b])?`<path class="${cls}" d="${pathFor(els[a],els[b])}"/>`:'').join('');
+    (els[a]&&els[b]&&!els[a].classList.contains('hidden')&&!els[b].classList.contains('hidden'))?`<path class="${cls}" d="${pathFor(els[a],els[b])}"/>`:'').join('');
 }
 
 function apply(){
@@ -477,6 +536,7 @@ function apply(){
 function bounds(){
   let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
   for(const el of Object.values(els)){
+    if(el.classList.contains('hidden'))continue;
     x1=Math.min(x1,el.offsetLeft); y1=Math.min(y1,el.offsetTop);
     x2=Math.max(x2,el.offsetLeft+el.offsetWidth); y2=Math.max(y2,el.offsetTop+el.offsetHeight);
   }
@@ -490,7 +550,7 @@ function fit(){
 function focusNode(id){
   const e=els[id]; if(!e) return;
   const r=vp.getBoundingClientRect(); k=Math.max(k,.85);
-  tx=r.width/2-(e.offsetLeft+e.offsetWidth/2)*k; ty=r.height/2-(e.offsetTop+e.offsetHeight/2)*k;
+  tx=(r.width-(r.width>980?290:0))/2-(e.offsetLeft+e.offsetWidth/2)*k; ty=140-e.offsetTop*k;
   apply(); select(id);
 }
 function zoomAt(f){
@@ -504,7 +564,7 @@ document.getElementById('zFit').onclick=fit;
 
 let panning=false,px=0,py=0;
 vp.addEventListener('pointerdown',e=>{
-  if(e.target.closest('.node, .float')) return;
+  if(e.target.closest('.node, .float, .impact, button, input, form')) return;
   panning=true; px=e.clientX; py=e.clientY; vp.classList.add('panning');
   vp.setPointerCapture(e.pointerId);
   select(null); if(editing){ editing=null; renderAnswers(); drawWires(); }
@@ -536,7 +596,7 @@ world.addEventListener('pointermove',e=>{
   if(!drag) return;
   drag.el.style.left=drag.ox+(e.clientX-drag.sx)/k+'px';
   drag.el.style.top=drag.oy+(e.clientY-drag.sy)/k+'px';
-  drawWires();
+  updateGroupFrames();drawWires();
 });
 world.addEventListener('pointerup',()=>{ if(drag){drag.el.classList.remove('drag'); drag=null;} });
 
@@ -550,6 +610,11 @@ function select(id){
 }
 
 world.addEventListener('click',e=>{
+  if(e.target.closest('#generateScenes')){
+    if(state.open['hub-script'])return;
+    const button=document.getElementById('generateScenes');button.disabled=true;button.textContent='Generating scenes…';els.script.classList.add('working');
+    setTimeout(()=>{state.scenesGenerated=true;els.script.classList.remove('working');syncGraphVisibility();layoutAnswers();drawWires();countOpen();focusNode('scene1');toast('Scene groups created · each has its own questions and connected outputs')},650);return;
+  }
   const focus=e.target.closest('[data-focus-node]');
   if(focus){ focusNode(focus.dataset.focusNode); return; }
   const b=e.target.closest('[data-act]'); if(!b) return;
@@ -565,6 +630,7 @@ world.addEventListener('click',e=>{
 function answerQuestion(hubId,val){
   const hub=HUBS.find(h=>h.id===hubId), q=state.open[hubId];
   if(!hub||!q) return;
+  if(q.k==='Diner'&&!q.opts.includes(val)){q.q='For “'+val+'”, should the search target an operating practical diner or a dressed set?';renderHub(hub);layoutAnswers();countOpen();drawWires();return}
   const oldEntry=Object.entries(state.answers).find(([,a])=>a.owner===hub.owner&&a.k===q.k);
   const id=oldEntry?.[0]||`a_${hub.owner}_${q.k.toLowerCase().replace(/[^a-z0-9]+/g,'_')}`;
   const before=oldEntry?{...oldEntry[1]}:null;
@@ -577,6 +643,11 @@ function answerQuestion(hubId,val){
   }
   const openQuestion={...q}; delete openQuestion.deferred;
   state.open[hubId]=null;
+  if(!state.scenesGenerated&&hubId==='hub-script'){
+    state.answers[id].stale=false;state.open[hubId]=state.scriptQueue.shift()||null;
+    renderHub(hub);renderAnswers();syncGraphVisibility();countOpen();
+    toast(state.open[hubId]?'Answer saved · next script question ready':'Script answers saved · generate scenes when ready');return;
+  }
   renderHub(hub); renderAnswers();
   const hit=markStale(hub.owner);
   state.pendingChange={type:'answer',id,hubId,before,openQuestion,owner:hub.owner,from:before?.v||'Unanswered',to:val,hit};
@@ -593,7 +664,7 @@ function changeFilter(id,val){
   renderAnswers();
   if(val==='Not sure yet'){
     const hub=openHub||HUBS.find(h=>h.owner===a.owner);
-    state.open[hub.id]={q:a.q,opts:a.opts,k:a.k,deferred:true}; renderHub(hub); countOpen();
+    state.open[hub.id]={q:a.q,opts:a.opts,k:a.k,deferred:true}; markStale(a.owner);renderHub(hub); countOpen();
     toast('Saved as unresolved · dependent work remains paused'); drawWires(); return;
   }
   if(openHub){ state.open[openHub.id]=null; renderHub(openHub); }
@@ -660,20 +731,28 @@ function rerunNodes(hit){
   targets.forEach(id=>els[id].classList.add('working'));
   setTimeout(()=>{
     if(targets.includes('scene3')||targets.includes('loc-diner')) materializeScene3();
-    clearStale(targets);
-    toast('Rerun finished · every new figure carries its source');
+    const blocked=[];
+    for(const id of targets){
+      const sceneId=id==='loc-diner'?'scene3':id;
+      if(state.open['hub-'+sceneId]||(['plan-budget','plan-creative','packet'].includes(id)&&Object.values(state.open).some(Boolean))){
+        blocked.push(id);els[id].classList.remove('working');continue;
+      }
+      if(id!=='scene3'&&id!=='loc-diner')els[id].querySelector('[data-body]').innerHTML=CORE.find(n=>n.id===id).body;
+    }
+    clearStale(targets.filter(id=>!blocked.includes(id)));syncGraphVisibility();layoutAnswers();drawWires();
+    toast(blocked.length?'Ready branches refreshed · unresolved branches remain paused':'Affected sample outputs refreshed · saved answers preserved');
   },1200);
 }
 function rerun(id){ rerunNodes([id]); }
 function countOpen(){
-  const n=Object.values(state.open).filter(Boolean).length;
+  const n=Object.entries(state.open).filter(([id,q])=>q&&(state.scenesGenerated||id==='hub-script')).length;
   document.getElementById('openCount').innerHTML=`<i class="dot ${n?'clay':'moss'}"></i>${n} open`;
   renderTray();
 }
 function renderTray(){
   const ownerLabel={script:'Script',scene1:'Scene 1',scene2:'Scene 2',scene3:'Scene 3'};
-  const waiting=HUBS.filter(h=>state.open[h.id]).map(h=>({focus:h.id,q:state.open[h.id].q,where:`${ownerLabel[h.owner]} · ${state.open[h.id].deferred?'answer still needed':'blocks dependent work'}`,tone:state.open[h.id].deferred?'clay':'brass'}));
-  waiting.push({focus:'loc-leo',q:'Base camp parking is not published',where:'Leo Carrillo · needs a call',tone:'brass'});
+  const waiting=HUBS.filter(h=>state.open[h.id]&&(state.scenesGenerated||h.owner==='script')).map(h=>({focus:h.id,q:state.open[h.id].q,where:`${ownerLabel[h.owner]} · ${state.open[h.id].deferred?'answer still needed':'blocks dependent work'}`,tone:state.open[h.id].deferred?'clay':'brass'}));
+  if(state.scenesGenerated)waiting.push({focus:'loc-leo',q:'Base camp parking is not published',where:'Leo Carrillo · needs a call',tone:'brass'});
   document.getElementById('trayContent').innerHTML=`<h4><span class="dot ${waiting.length?'clay':'moss'}"></span>Waiting on you</h4><p class="note" style="margin-bottom:2px">Each item blocks a specific decision.</p>${waiting.map(item=>`<div class="item" data-focus="${item.focus}"><span class="dot ${item.tone}" style="margin-top:6px"></span><span><span class="t">${item.q}</span><br><span class="w">${item.where}</span></span></div>`).join('')}`;
 }
 
@@ -682,6 +761,7 @@ document.getElementById('tray').addEventListener('click',e=>{
 });
 document.querySelectorAll('.tools button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tools button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  if(b.dataset.tool!=='move'){if(!state.scenesGenerated&&b.dataset.tool!=='script'){toast('Answer the script questions and generate scenes first');return}focusNode(b.dataset.tool)}
 });
 document.getElementById('send').onclick=()=>{
   const v=document.getElementById('ask').value.trim();
@@ -704,16 +784,16 @@ function showFlow(name){
   document.getElementById('viewTabs').classList.toggle('hidden',!inProject);
   document.getElementById('openCount').classList.toggle('hidden',!inProject);
   document.getElementById('exportPacket').classList.toggle('hidden',!inProject);
-  document.getElementById('crumb').textContent=name==='workspace'?'Workspaces':name==='upload'?'New workspace · add screenplay':name==='progress'?'Coastal short · script agent':'Coastal short · decision graph';
+  document.getElementById('crumb').textContent=name==='workspace'?'Workspaces':`${state.workspaceName} · ${name==='upload'?'add screenplay':name==='progress'?'script agent':'decision graph'}`;
 }
 function openCanvas(){
   flowScreens.forEach(id=>document.getElementById(id).classList.add('hidden'));
   showView('canvas');
-  renderAnswers(); countOpen();
+  renderAnswers(); syncGraphVisibility(); countOpen();
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     layoutAnswers(); drawWires();
-    const r=vp.getBoundingClientRect(); k=r.width<800?.48:.66;
-    tx=r.width/2-(CORE.find(n=>n.id==='script').x+190)*k; ty=34; apply(); select('script');
+    const r=vp.getBoundingClientRect(); k=r.width<800?.55:.83;
+    tx=(r.width<1000?28:70)-els.script.offsetLeft*k; ty=90-els.script.offsetTop*k; apply(); select('script');
   }));
 }
 function showView(view){
@@ -724,7 +804,7 @@ function showView(view){
   document.getElementById('openCount').classList.remove('hidden');
   document.getElementById('exportPacket').classList.remove('hidden');
   document.querySelectorAll('#viewTabs [data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===view));
-  document.getElementById('crumb').textContent=`Coastal short · ${view==='canvas'?'decision graph':view}`;
+  document.getElementById('crumb').textContent=`${state.workspaceName} · ${view==='canvas'?'decision graph':view}`;
   if(view==='canvas') requestAnimationFrame(()=>{apply();drawWires()});
 }
 function goHome(){
@@ -736,9 +816,28 @@ function goHome(){
 }
 function openUpload(){
   const name=document.getElementById('workspaceName').value.trim()||'Untitled production';
+  state.workspaceName=name;
   document.getElementById('uploadTitle').textContent=name; showFlow('upload');
 }
 function startProcessing(fileName='coastal_short.pdf'){
+  state.filename=fileName;state.scenesGenerated=false;state.answers={};editing=null;
+  state.scriptQueue=[
+    {q:'How many crew will be on the ground?',opts:['6','12','20+'],k:'Crew size'},
+    {q:'Will any part of this shoot use a drone?',opts:['No','Yes'],k:'Drone'},
+    {q:'How many principal photography days can the first plan use?',opts:['1 day','2 days','3 days'],k:'Shoot days'}
+  ];
+  state.open={
+    'hub-script':{q:'How far from Ventura can the unit travel?',opts:['25 mi','60 mi of Ventura','Statewide'],k:'Travel limit'},
+    'hub-scene1':{q:'Public sand or a private cove for this scene?',opts:['Public sand','Private cove'],k:'Beach type'},
+    'hub-scene2':{q:'Is golden hour a hard requirement for the cliff wide?',opts:['Required','Nice to have'],k:'Light'},
+    'hub-scene3':JSON.parse(JSON.stringify(demoOpen['hub-scene3']))
+  };
+  resetNodeBodies();
+  els.script.querySelector('h3').textContent=fileName;
+  for(const id of ['scene1','scene2','scene3','loc-leo','req-leo','loc-diner','plan-budget','plan-creative','packet']){
+    els[id].querySelector('[data-body]').innerHTML='<p class="note">Queued · waiting for the required answers. Sample output appears after generation.</p>';
+  }
+  HUBS.forEach(renderHub);renderAnswers();syncGraphVisibility();
   showFlow('progress');
   const steps=[...document.querySelectorAll('.agent-step')];
   steps.forEach(s=>s.classList.remove('done','live','blocked'));
@@ -748,7 +847,7 @@ function startProcessing(fileName='coastal_short.pdf'){
   steps.forEach((step,i)=>progressTimers.push(setTimeout(()=>{
     steps.slice(0,i).forEach(s=>{s.classList.remove('live','blocked');s.classList.add('done')});
     step.classList.add(i===steps.length-1?'blocked':'live');
-    document.getElementById('agentStatus').textContent=i===0?`${fileName} received`:i===steps.length-1?'3 decisions need your answer':step.querySelector('h4').textContent+'…';
+    document.getElementById('agentStatus').textContent=i===0?`${fileName} received · sample screenplay used in this UI preview`:i===steps.length-1?'Script decisions need your answer':step.querySelector('h4').textContent+'…';
     if(i===steps.length-1){ document.getElementById('continueCanvas').classList.remove('hidden'); }
   },i*430)));
 }
@@ -756,20 +855,33 @@ function startProcessing(fileName='coastal_short.pdf'){
 document.getElementById('brandHome').onclick=goHome;
 document.getElementById('backWorkspaces').onclick=goHome;
 document.getElementById('newWorkspace').onclick=openUpload;
+function resetNodeBodies(){
+  for(const n of CORE){const el=els[n.id];el.classList.remove('stale','working');el.querySelector('[data-body]').innerHTML=n.body;el.querySelector('h3').textContent=n.title;el.querySelector('.sub').textContent=n.sub;delete el.dataset.moved;el.style.left=n.x+'px';el.style.top=n.y+'px'}
+}
 document.getElementById('openExisting').onclick=openCanvas;
 document.getElementById('continueCanvas').onclick=openCanvas;
 document.getElementById('useDemo').onclick=()=>startProcessing('coastal_short.pdf');
 document.querySelectorAll('#viewTabs [data-view]').forEach(b=>b.onclick=()=>showView(b.dataset.view));
 document.getElementById('exportPacket').onclick=()=>showView('packet');
-document.getElementById('applyPriority').onclick=e=>{e.currentTarget.textContent='Plans re-ranked';setTimeout(()=>e.currentTarget.textContent='Re-rank plans',1800)};
-document.getElementById('packetExport').onclick=e=>{e.currentTarget.textContent='Exported with flags';e.currentTarget.classList.remove('pri')};
+document.getElementById('applyPriority').onclick=()=>{
+  const value=document.getElementById('priorityInput').value.trim();
+  document.getElementById('priorityRules').textContent=/beach|moves|dusk/i.test(value)?'Preview rules: group beach scenes (preference) · fewer moves (preference) · protect dusk (hard constraint). Apply by choosing a plan.':'Clarification needed: which priority should lead — lower cost, fewer moves, or fewer shooting days?';
+};
+document.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>{state.selectedPlan=b.dataset.plan;document.querySelectorAll('[data-plan]').forEach(x=>{x.textContent=x.dataset.plan===state.selectedPlan?'Selected plan':`Choose ${x.dataset.plan} plan`;x.classList.toggle('pri',x.dataset.plan===state.selectedPlan)})});
+document.getElementById('packetExport').onclick=()=>{
+  const lines=['# '+state.workspaceName+' — prototype packet','','Illustrative UI preview. No applications submitted.','Selected plan: '+state.selectedPlan,'Screenplay: '+state.filename,'','## Saved answers',...Object.values(state.answers).map(a=>'- '+a.k+': '+a.v),'','## Unresolved',...Object.values(state.open).filter(Boolean).map(q=>'- '+q.q),'- Base camp parking: not published','- Location availability: not verified'];
+  const url=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/markdown'})),link=document.createElement('a');link.href=url;link.download='sceneatlas-prototype-packet.md';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
 const dropzone=document.getElementById('dropzone'), fileInput=document.getElementById('fileInput');
 dropzone.onclick=()=>fileInput.click();
 dropzone.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fileInput.click()}};
-fileInput.onchange=()=>{const f=fileInput.files[0];if(f){document.getElementById('fileLabel').textContent=f.name;startProcessing(f.name)}};
+function receiveFile(f){if(!f)return;if(!/\.pdf$/i.test(f.name)||f.size>50*1024*1024){document.getElementById('fileLabel').textContent='Choose a PDF smaller than 50 MB, then retry.';return}document.getElementById('fileLabel').textContent=f.name;startProcessing(f.name)}
+fileInput.onchange=()=>receiveFile(fileInput.files[0]);
 ['dragenter','dragover'].forEach(type=>dropzone.addEventListener(type,e=>{e.preventDefault();dropzone.classList.add('dragover')}));
 ['dragleave','drop'].forEach(type=>dropzone.addEventListener(type,e=>{e.preventDefault();dropzone.classList.remove('dragover')}));
-dropzone.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f){document.getElementById('fileLabel').textContent=f.name;startProcessing(f.name)}});
+dropzone.addEventListener('drop',e=>receiveFile(e.dataTransfer.files[0]));
+world.addEventListener('submit',e=>{const form=e.target.closest('.free-answer');if(!form)return;e.preventDefault();const value=form.querySelector('input').value.trim();if(value)answerQuestion(form.dataset.hub,escapeHTML(value))});
+function escapeHTML(value){return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 document.getElementById('undoChange').onclick=()=>{
   const p=state.pendingChange; if(!p) return;

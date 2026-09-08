@@ -7,7 +7,6 @@ out/
 .playwright-mcp/
 playwright-report/
 test-results/
-artifacts/demo-video/
 coverage/
 agents/.venv/
 __pycache__/
@@ -16,3 +15,9 @@ __pycache__/
 *.tsbuildinfo
 .DS_Store
 .vercel
+
+# Local-only demo video production files
+/artifacts/demo-video/
+/scripts/record-demo.*
+/scripts/edit-demo.*
+/docs/DEMO_*.md

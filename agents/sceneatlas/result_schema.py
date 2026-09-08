@@ -62,4 +62,9 @@ def workflow_schema(kind: str) -> dict:
                            "data": {"anyOf": [deepcopy(ENTITIES[name]) for name in ["scene", "plan", "question", "note"]]}},
             "required": ["targetId", "summary", "data"],
         }}
-    return generation_shape({"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False})
+    shape = generation_shape({"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False})
+    if kind == "requirements":
+        # A refresh belongs to one existing location, including on boards with
+        # multiple selected locations. Zero permits a producer-input checkpoint.
+        shape["properties"]["locations"]["maxItems"] = 1
+    return shape

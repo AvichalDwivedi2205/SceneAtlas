@@ -30,6 +30,8 @@ def test_producer_owned_inputs_remain_questions(prompt):
 @pytest.mark.parametrize("key,prompt", [
     ("park_district_review_fee", "What is the specific review fee for commercial filming at this park?"),
     ("park_activity_level", "Is filming at this park considered 'simple' or 'complex'?"),
+    ("multiple_locations", None),
+    ("different_location", None),
 ])
 async def test_authority_question_is_repaired_before_publication(monkeypatch, key, prompt, always_invalid):
     location = {
@@ -64,7 +66,12 @@ async def test_authority_question_is_repaired_before_publication(monkeypatch, ke
         model_calls.append(ctx.session.state["task_context"].get("validationFeedback"))
         result = {"locations": [copy.deepcopy(location)], "questions": [], "message": "Preparation draft; authority confirmation required."}
         if always_invalid or len(model_calls) == 1:
-            result["questions"] = [agent.intake_question(key, prompt, "Not stated in the available official evidence", ["requirements"])]
+            if key == "multiple_locations":
+                result["locations"].append({**copy.deepcopy(location), "name": "Another beach"})
+            elif key == "different_location":
+                result["locations"][0]["name"] = "Another beach"
+            else:
+                result["questions"] = [agent.intake_question(key, prompt, "Not stated in the available official evidence", ["requirements"])]
         else:
             result["locations"][0]["requirements"] = [{
                 "title": "Authority confirmation required", "detail": "Applicable classification and review fee remain unverified.",
@@ -94,7 +101,7 @@ async def test_authority_question_is_repaired_before_publication(monkeypatch, ke
     else:
         await collect()
         result = json.loads(events[-1].content.parts[0].text)["sceneatlasResult"]
-        assert len(model_calls) == 2 and "external authority fact" in model_calls[1]["problem"]
+        assert len(model_calls) == 2 and model_calls[1]["problem"]
         assert [q["data"]["key"] for q in result["questions"]] == ["vehicles"]
         assert result["questions"][0]["data"]["answer"] is None
         assert result["questions"][0]["data"]["resolution"] == "open"
@@ -104,3 +111,12 @@ async def test_authority_question_is_repaired_before_publication(monkeypatch, ke
         assert saved["requirements"][0]["status"] == "unresolved"
         assert saved["requirements"][0]["externalStatus"] == "unverified"
     assert retrievals == ["search_sources", "parallel_extract"]
+
+
+def test_requirements_cannot_complete_without_refreshing_the_target():
+    from sceneatlas.result_schema import workflow_schema
+    assert workflow_schema("requirements")["properties"]["locations"]["maxItems"] == 1
+    with pytest.raises(ValueError, match="exactly one selected target"):
+        agent.validate_requirements_target({"locations": [], "questions": []}, {"name": "Fixture beach"})
+    question = agent.intake_question("activities", "Will you use fire effects?", "Producer input", ["requirements"])
+    agent.validate_requirements_target({"locations": [], "questions": [question]}, {"name": "Fixture beach"})

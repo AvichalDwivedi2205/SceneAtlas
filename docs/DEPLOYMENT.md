@@ -1,6 +1,10 @@
 # SceneAtlas deployed development environment
 
-Last verified: September 7, 2026.
+Last verified: September 8, 2026.
+
+The September 8 deployment uses Parallel Search and Extract only. Vercel deployment `dpl_GGiFhkwAxUyKasNd4mjXwdhJAXrv` is ready, Convex functions deployed at 19:31 IST, Cloud Run revision `sceneatlas-agent-bridge-00009-s6l` serves all traffic, and Agent Engine update operation `7468039471577956352` completed. Runtime metadata contains only the callback and Parallel secret bindings; obsolete provider access was removed from the agent service account. Cloud Run health returns HTTP 200.
+
+Validation of this update: 58 Python tests and 26 app tests pass, with clean typecheck/lint and two passing hosted preview tests. The default local Turbopack build encountered a process/port restriction; the local Webpack production build and Vercel's default Turbopack production build both passed. Full hosted one-scene acceptance passed in 1.8 minutes: screenplay upload, intake, scene generation, sourced location research, requirements, schedule, and authenticated PDF download. All saved sources report `parallel`. Research run `ks72q9k9c7dsjhxywp0bx464k98e0gfm`, requirements run `ks7ffjgz52pcwye31yaedr3mrd8e0yna`, and packet run `ks709a8a71b93ev4n7f7n0w0m58e1dgj` completed. Source evidence carries search IDs `search_a0a2edc3aa5d5bf09d685e5c06753356` and `search_cb7ea080c2bbb03450355a1025fcc3ac`. The disposable board was archived and its test user removed. Older managed run records below remain dated evidence.
 
 | Resource | Value | State |
 | --- | --- | --- |
@@ -13,7 +17,6 @@ Last verified: September 7, 2026.
 | Cloud Run bridge | `https://sceneatlas-agent-bridge-x4lfgrmrha-uc.a.run.app` | Ready |
 | Cloud Tasks queue | `sceneatlas-runs` | Ready |
 | Parallel key | Secret Manager `sceneatlas-parallel-api-key` | Live Search and Extract verified |
-| Exa fallback | Secret Manager `sceneatlas-exa-api-key` | Enabled at project owner's request; live key verified |
 | Clerk | Dedicated SceneAtlas development application | Keys synced; verified email sign-in enabled |
 
 Verified cloud boundaries:
@@ -47,9 +50,7 @@ The browser downloaded an eight-page PDF; packet entity `jx74586my3th0dbrw5kh722
 
 Clerk keys and issuer are configured in Vercel and Convex. These are development-instance credentials. A production Clerk instance requires its own matching keys and configured domain.
 
-Parallel uses `sceneatlas-parallel-api-key` in this project's Secret Manager. Its value was copied from the user's existing Parallel secret in `slatetrace-avd-260822`; the managed agent receives it as `PARALLEL_API_KEY`. Search and Extract run only on the agent backend. No provider key is exposed to browsers. The project owner explicitly enabled Exa fallback on September 6. `EXA_FALLBACK_ENABLED=true` enables backup for Parallel 402/429, connection/timeout, and 5xx failures; authentication/configuration errors still fail visibly. Exa receives the server-only `EXA_API_KEY` secret. Source metadata retains `provider=exa`, the actual Exa request ID, and the fallback reason. Set the flag to `false` for a Parallel-only submission deployment; eligibility has not been independently established.
-
-An independent live Exa credential check returned eight sources with request ID `exa_05f15bf1a84f8993427a5ddff9459e26`. Automated tests inject a Parallel rate-limit response to verify fallback and confirm that 401 errors are not silently hidden. No real quota was deliberately exhausted.
+Parallel uses `sceneatlas-parallel-api-key` in this project's Secret Manager. Its value was copied from the user's existing Parallel secret in `slatetrace-avd-260822`; the managed agent receives it as `PARALLEL_API_KEY`. Search and Extract run only on the agent backend. No provider key is exposed to browsers. Current source and deployment scripts configure no alternate web research provider. Capacity limits, exhausted transient retries, and authentication/configuration errors remain visible. Sources retain their actual Parallel request ID, retrieval time, and cache state. The deployed managed agent configuration was inspected after update and contains no alternate provider binding.
 
 Run live collaboration acceptance explicitly with:
 

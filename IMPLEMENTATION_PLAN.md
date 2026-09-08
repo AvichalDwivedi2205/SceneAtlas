@@ -1,6 +1,6 @@
-**SceneAtlas — implementation plan, September 6, 2026**
+**SceneAtlas — implementation plan, updated September 8, 2026**
 
-Implementation uses **Convex + Clerk + React Flow**, with **Python Google ADK agents on Google Cloud Agent Runtime**. Convex owns durable product state and live collaboration. Clerk owns identity. ADK owns agent execution. Application, tests, packet renderer, cloud bridge, and reproducible deployment scripts now exist. The web preview, Convex development backend, Parallel secret, managed Agent Engine, Cloud Tasks queue, and Cloud Run bridge are deployed. The dedicated Clerk development instance is configured. On September 6, the project owner explicitly enabled Exa fallback after supplying its key; Parallel remains the first discovery provider. Real owner/editor/viewer browser acceptance has passed. The one-scene hosted workflow has passed through managed ingestion, research, requirements, schedule, and authenticated PDF download. Broader acceptance and release gaps are tracked in docs/DEPLOYMENT.md.
+Implementation uses **Convex + Clerk + React Flow**, with **Python Google ADK agents on Google Cloud Agent Runtime**. Convex owns durable product state and live collaboration. Clerk owns identity. ADK owns agent execution. Application, tests, packet renderer, cloud bridge, and reproducible deployment scripts now exist. The web preview, Convex development backend, Parallel secret, managed Agent Engine, Cloud Tasks queue, and Cloud Run bridge are deployed. The dedicated Clerk development instance is configured. Current source and deployment configuration use Parallel Search and Extract only; deployment status is tracked in docs/DEPLOYMENT.md. Real owner/editor/viewer browser acceptance has passed. The one-scene hosted workflow has passed through managed ingestion, research, requirements, schedule, and authenticated PDF download. Broader acceptance and release gaps are tracked in docs/DEPLOYMENT.md.
 
 Inputs reviewed: [PRD](/Users/avichaldwivedi/dev/SceneAtlas/Product.md), [nine-screen design](/Users/avichaldwivedi/dev/SceneAtlas/UI_Landind.html), and [interactive canvas design](/Users/avichaldwivedi/dev/SceneAtlas/UI_Canvas.html). Both designs were also opened in a browser. Their data and timers are illustrative, not production integrations.
 
@@ -21,7 +21,7 @@ Your latest request adds simultaneous viewing and editing to the first release, 
 | Presence                | `@convex-dev/presence` plus separate bounded live signals | Online users, cursors, selections, current editing state                            |
 | Agent backend           | Python, Google ADK, Pydantic                              | Coordinator and specialist workflows, validated structured results                  |
 | Models                  | Gemini through Vertex AI                                  | Script understanding, clarification, rules, research synthesis, explanations        |
-| Research                | Parallel Search first; Parallel Extract as needed         | Runtime discovery and extraction with recorded provenance                           |
+| Research                | Parallel Search and Extract only                         | Runtime discovery and extraction with recorded provenance                           |
 | Agent hosting           | Google Cloud managed Agent Runtime                        | Run actual deployed ADK workflow required by PRD                                    |
 | Job transport           | Small Cloud Run bridge + Cloud Tasks                      | Durable dispatch, authenticated cloud invocation, bounded retryable stages          |
 | File storage            | Convex Storage                                            | Script originals and generated packets; authenticated delivery                      |
@@ -108,7 +108,7 @@ Synchronization rules:
 - Undo creates a new, validated inverse change for the affected records. It never rolls back an entire board snapshot over collaborators' later work. Conflicting later edits require review.
 - Two users requesting the same generation with identical inputs attach to the same active run. Different scene work can run concurrently.
 
-Initial acceptance target: 2–5 active collaborators on the demo board. Stress-check 10 sessions and roughly 300 visible/available node records before claiming larger capacity. These are test targets, not existing limits or benchmarks.
+Initial acceptance target: 2–5 active collaborators on a shared board. Stress-check 10 sessions and roughly 300 visible/available node records before claiming larger capacity. These are test targets, not existing limits or benchmarks.
 
 **5. Durable data model**
 
@@ -204,11 +204,11 @@ Ingestion: accept text PDFs up to the designed 50 MB limit and pasted text. Vali
 
 Question handling: preserve original free text and interpreted rule. Track script-derived, user-confirmed, sourced and estimated facts distinctly. “Unknown” remains saved and visible, with next verification step. Drone use, equipment, budget, dates and durations require producer confirmation or explicit permission to estimate. Reuse valid answers by scope and dependency; never infer a real production choice solely from fictional screenplay action.
 
-Research: all new web discovery starts with runtime Parallel Search. Save `search_id`, URLs, extracted claims, retrieval times and provider status. Extract reads selected pages/PDFs; it does not replace the required Search call. [Parallel Search](https://docs.parallel.ai/search/search-quickstart)
+Research: all web discovery uses runtime Parallel Search. Save `search_id`, URLs, extracted claims, retrieval times and provider status. Parallel Extract reads selected pages/PDFs; it does not replace the required Search call. Capacity limits and exhausted transient retries surface actionable failures without invoking an alternate provider. [Parallel Search](https://docs.parallel.ai/search/search-quickstart)
 
 Filter hard constraints before ranking creative fit, cost or moves. Request 1–5 candidates, default 3; return fewer with reasons when necessary. Do not fabricate locations, source URLs, fees, photos or availability. Show real source-linked imagery only where available and usable; otherwise use a neutral placeholder. A matching location is not a confirmed booking.
 
-Evidence cache is keyed by location/source/query and applicable confirmed facts, with retrieval time and freshness policy. Share compatible evidence across scenes/plans within the board. Material changes invalidate relevant interpretations. No shared private screenplay cache across tenants. Exa remains disabled in submitted deployment unless eligibility is explicitly established, per PRD.
+Evidence cache is keyed by location/source/query and applicable confirmed facts, with retrieval time and freshness policy. Share compatible evidence across scenes/plans within the board. Material changes invalidate relevant interpretations. No shared private screenplay cache across tenants. Reused evidence retains its original provenance and retrieval time.
 
 Treat source pages and uploaded scripts as untrusted content, never as tool instructions. Restrict extraction to public web resources and validate model output before it becomes a product fact. Contradictory or unavailable evidence becomes an unresolved item.
 
@@ -277,7 +277,7 @@ contracts/                     versioned JSON schemas and sample payloads
 tests/                         domain, Convex and browser tests
 agents/tests/                  Python agent/tool and renderer tests
 infra/                         reproducible deployment scripts/config
-docs/                          architecture, deployment and demo evidence
+docs/                          architecture, deployment and application acceptance
 ```
 
 Validate shared JSON contracts with TypeScript schemas and Python/Pydantic tests. Include contract version on job requests/events. Keep provider calls, permission decisions, dependency traversal, and rendering inside their owning modules rather than scattering them through UI nodes.
@@ -294,7 +294,7 @@ Validate shared JSON contracts with TypeScript schemas and Python/Pydantic tests
 | 5 — Branch planning              | Budget/Creative frames, per-plan choices, cost accounting, rule controls, heuristic schedule, comparison                              | Both plans preserve independent decisions; shared fees handled correctly; unknown costs and infeasibility visible              |
 | 6 — Scoped change loop           | Scoped chat, dependencies, input and result previews, staged regeneration, conflict checks, durable undo                              | Scene revision updates exact dependents; other branch remains correct; delayed old result cannot win                           |
 | 7 — Packet                       | Current-branch manifest, PDF/ZIP, supported form, source list, unresolved/stale states, private download                              | Download matches selected plan/version and includes no invented confirmations; rendered output verified                        |
-| 8 — Release                      | Multi-user tests, failure drills, visual/accessibility pass, quotas/logging, setup/license/docs, hosted demo and submission artifacts | Full acceptance matrix passes against deployed services; three-minute demonstration uses real workflow                         |
+| 8 — Release                      | Multi-user tests, failure drills, visual/accessibility pass, quotas/logging, setup/license/docs, hosted application                  | Full acceptance matrix passes against deployed services                                                                        |
 
 Milestones describe dependency order. Establish permissions, revisions and job contracts early even where richer UI follows later. First useful vertical slice: sign in → create shared board → upload → answer → generate scenes → inspect one sourced location from deployed ADK. Expand that working slice through both plans, revision and export.
 
@@ -314,7 +314,7 @@ Milestones describe dependency order. Establish permissions, revisions and job c
 | Performance      | Representative script and board; progressive result latency; drag responsiveness; cursor write rate; 2–5 users plus 10-session stress target               |
 | Release          | Fresh install/build; typecheck/lint; domain/Convex/Python tests; Playwright critical path; deployed Gemini/Parallel trace; secret-free public repo         |
 
-Use deterministic fixtures for repeatable logic tests and provider failure tests. Keep a separate live integration smoke test with actual services. Fixture UI must be explicitly labeled; it cannot stand in for the submitted live demo. Measure latency and costs before reporting results.
+Use deterministic fixtures for repeatable logic tests and provider failure tests. Keep a separate live integration smoke test with actual services. Fixture UI must be explicitly labeled; it cannot establish live-service acceptance. Measure latency and costs before reporting results.
 
 **14. Time, risks and release scope**
 
@@ -325,16 +325,16 @@ PRD deadline: September 9, 2026, 2:00 PM PDT / September 10, 2026, 2:30 AM IST. 
 | Sep 6         | Cloud/auth spike, shared workspace shell, canvas foundations, first script-to-question path                       |
 | Sep 7         | Scene generation, Parallel evidence, independent scene runs, candidate selection, two branch settings             |
 | Sep 8         | Costs/schedules, scoped revision/undo, supported permit packet                                                    |
-| Sep 9         | Deployment checks, multi-user/failure fixes, public source/license/setup docs, record and submit demo with buffer |
+| Sep 9         | Deployment checks, multi-user/failure fixes, public source/license/setup docs                                    |
 
 This is a target sequence, not a promise that all milestones fit. Review actual progress after milestones 0 and 3. Do not silently drop PRD acceptance criteria to call an incomplete build finished.
 
-Protect the core decision-to-export path and requested editor/viewer collaboration. Keep the demo screenplay small and permitting pilot narrow. Cut optional embellishments first: emailed invites, follow-user camera, standalone maps, organization administration, generated imagery, general freeform drawing, payments, analytics dashboards, mobile canvas editing and offline coauthoring. Basic notes/annotation links can follow the core canvas if time permits; generated semantic dependencies remain controlled by product logic.
+Protect the core decision-to-export path and requested editor/viewer collaboration. Keep the initial research acceptance workload small and permitting pilot narrow while validating full-script breakdown separately. Cut optional embellishments first: emailed invites, follow-user camera, standalone maps, organization administration, generated imagery, general freeform drawing, payments, analytics dashboards, mobile canvas editing and offline coauthoring. Basic notes/annotation links can follow the core canvas if time permits; generated semantic dependencies remain controlled by product logic.
 
-Largest implementation risks: managed-runtime access and quotas; durable human pause/resume; source/fee completeness; same-record editing and undo; revision dependency accuracy; current official form compatibility. Address each with an early executable spike or focused test, not a late demo assumption.
+Largest implementation risks: managed-runtime access and quotas; durable human pause/resume; source/fee completeness; same-record editing and undo; revision dependency accuracy; current official form compatibility. Address each with an early executable spike or focused test.
 
 Track model tokens, Parallel searches/extractions, agent execution time and Convex traffic per run. Bound concurrency, candidates, retries, upload processing and user-triggered agent calls. Avoid paid-tier or monthly-cost promises before measurement.
 
-Release deliverables: hosted web URL, deployed managed ADK resource, documented project/region/endpoints and environment-variable names, real provider request/run IDs in sanitized logs, reproducible setup/deploy steps, root OSI-approved commercial-use LICENSE, public original source/assets, English feature/technology/data-source write-up, and at-most-three-minute public demo. Submission selects Parallel track and eligible team members; preserve submitted version after deadline. Use only authorized demo screenplay, source assets and third-party libraries.
+Application release deliverables: hosted web URL, deployed managed ADK resource, documented project/region/endpoints and environment-variable names, real provider request/run IDs in sanitized logs, reproducible setup/deploy steps, root OSI-approved commercial-use LICENSE, public original source/assets, and English feature/technology/data-source write-up. Preserve the submitted version after the deadline. Use only authorized screenplays, source assets and third-party libraries. Submission requirements remain in the PRD; recording plans and media stay outside tracked documentation.
 
-Defaults for the next implementation turn: Clerk auth; private boards; owner/editor/viewer; copyable recipient-bound invitations; simultaneous board editing with revision conflicts; one script per board; two independent plans; California state-property permit pilot; Parallel primary; Exa fallback enabled at the project owner's request; desktop-first canvas. Current work: close official-form/ZIP export, broader multi-scene and revision acceptance, production configuration, and submission/demo release gates.
+Defaults for the next implementation turn: Clerk auth; private boards; owner/editor/viewer; copyable recipient-bound invitations; simultaneous board editing with revision conflicts; one script per board; two independent plans; California state-property permit pilot; Parallel Search and Extract only; desktop-first canvas. Current work: close official-form/ZIP export, broader multi-scene and revision acceptance, production configuration, and application release gates.

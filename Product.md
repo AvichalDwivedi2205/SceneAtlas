@@ -7,14 +7,14 @@ Promise: **From screenplay to a researched shooting plan.**
 
 Help a producer turn a screenplay into location choices, a proposed shooting order, and a reviewable permit preparation packet. The user creates and opens a workspace, drops a screenplay PDF onto its infinite canvas, and builds a connected production plan from a persistent script node. Script-level questions and saved answers belong to that node. Generated scenes branch beneath it; each scene owns its questions, answers, filters, and connected outputs. Two plan branches show the tradeoffs between a fixed budget and no fixed budget cap.
 
-The central demonstration is a complete decision: describe production priorities, answer necessary questions, compare researched options, select locations, revise the plan, and export useful paperwork.
+The central workflow is a complete decision: describe production priorities, answer necessary questions, compare researched options, select locations, revise the plan, and export useful paperwork.
 
 Location research, permissions, costs, logistics, and contingency planning are established location-management responsibilities. This MVP supports their research and preparation stages. [ScreenSkills role description](https://www.screenskills.com/skills-checklists/scripted-film-and-tv/location-department/location-manager-skills/)
 
 ## 2. Release boundaries
 
 - Primary user: an independent producer or small production team.
-- Demo workload: one screenplay containing scenes.
+- Workspace workload: one screenplay containing scenes.
 - Each workspace preserves its uploaded screenplay, node connections, questions, answers, filters, selections, results, and canvas layout when reopened.
 - Supported permitting scope: a small set of California Film Commission state-property locations, with location-specific requirements researched from official sources. Unsupported jurisdictions are identified explicitly.
 - Two plan branches can research and populate concurrently: **Budget plan** and **Creative plan**. Names are editable.
@@ -164,7 +164,7 @@ Populate one supported official form where feasible, leaving missing fields and 
 - **Google ADK:** implement the coordinator, specialist agents, tool calls, session context, and workflow execution. Coordinate script breakdown, clarification, location research, requirement checks, plan comparison, and packet preparation through ADK.
 - **Gemini on Google Cloud:** power screenplay understanding, clarification, natural-language rule interpretation, and planning explanations through actual model calls from the deployed agents.
 - **Google Cloud agent deployment:** use Google Cloud's managed Agent Runtime as the deployment target for the ADK backend. The hosted web application must call this cloud deployment; hosting only the UI does not meet this architecture requirement. Follow the [ADK deployment guide](https://adk.dev/deploy/agent-runtime/).
-- **Parallel Search API — primary web search provider:** actual runtime discovery of locations, authorities, current requirements, and supporting evidence. All new web research starts with Parallel, and its results must influence the displayed recommendations and requirements.
+- **Parallel Search API — sole web search provider:** actual runtime discovery of locations, authorities, current requirements, and supporting evidence. All new web research uses Parallel, and its results must influence the displayed recommendations and requirements.
 - **Parallel Extract, where useful:** read relevant public pages and PDFs found during research.
 - **Application logic:** preserve workspace state and node relationships, original questions and answers, confirmed rules, and branch state; calculate comparable costs, check constraints, track affected outputs, and keep regeneration, revisions, and exports consistent.
 
@@ -176,9 +176,9 @@ Show progressive research results and clear failures. Reuse shared research acro
 
 Parallel Search must be imported/configured and called at runtime. An unused dependency, README mention, or Extract-only integration is insufficient. [Parallel integration requirements](https://agentic-cinema.devpost.com/details/parallel-resources), [Search documentation](https://docs.parallel.ai/search/search-quickstart), [Extract documentation](https://docs.parallel.ai/extract/extract-quickstart)
 
-#### Web search reliability and backup provider
+#### Web search reliability
 
-**Parallel remains the primary provider. Exa Search is the planned backup for a future production release or an explicitly permitted deployment.** Exa can provide web search through its [Search API](https://exa.ai/docs/reference/search).
+**Web research uses Parallel Search and Extract only.** Capacity limits and exhausted transient retries must remain visible and actionable. Do not invoke an alternate provider or fabricate sources when Parallel cannot complete a request. Reused evidence retains its original retrieval time and provenance.
 
 ### B. Delivery requirements
 
@@ -193,23 +193,10 @@ Parallel Search must be imported/configured and called at runtime. An unused dep
 - Submit by **September 9, 2026, 2:00 PM PDT — September 10, 2026, 2:30 AM IST**. Preserve the submitted version after the deadline.
 
 
-## 6. Three-minute demonstration
-
-1. **0:00–0:20:** Create and open a workspace, then drag a screenplay PDF onto the canvas.
-2. **0:20–0:45:** Show the ingestion transition and agent states. Answer a consequential question on the script node; the answer remains attached to it.
-3. **0:45–1:15:** Generate the scene groups. Focus a scene from the script index and answer its local question; connected outputs begin appearing.
-4. **1:15–1:50:** Inspect a sourced location, select locations, and compare the Budget and Creative plan outputs.
-5. **1:50–2:30:** Edit one scene's answer or location filter. Show affected nodes, regenerate dependent results, and apply the revision while preserving other answers and selections.
-6. **2:30–3:00:** Inspect the resulting shooting order and a requirement source, then export the chosen plan's preparation packet.
-
-Use one principal revision to keep the story understandable. The previously discussed drone/date-conflict scenario is an alternative demonstration if it produces clearer evidence; it is not an additional required demo sequence.
-
-Demo prices must come from researched fees, supplied quotes, or clearly labeled estimates. Select a plausible illustrative budget after validating the sample locations. Show working product behavior, including real Parallel use.
-
-## 7. Acceptance criteria
+## 6. Acceptance criteria
 
 - The agent workflow runs through Google ADK on the deployed Google Cloud agent backend, with real Gemini and Parallel Search calls demonstrable from code and execution logs.
-- Parallel is the primary web search provider. Quota exhaustion, retry exhaustion, cached results, and any enabled Exa fallback remain visible and preserve source provenance; the submitted deployment keeps Exa disabled unless eligibility is confirmed.
+- Parallel is the sole web search provider. Capacity limits, retry exhaustion, and cached results remain visible and preserve source provenance; service failures never trigger an alternate provider.
 - The hosted application, public licensed repository, run/deployment instructions, and demonstration satisfy Section 5.B.
 - Creating and opening a workspace reveals an empty canvas with PDF drop and file-picker controls.
 - Upload shows the filename, ingestion transition, actual agent stages, and actionable failures before returning to the same workspace canvas.
@@ -229,9 +216,9 @@ Demo prices must come from researched fees, supplied quotes, or clearly labeled 
 - Regeneration reuses valid answers, asks about newly introduced gaps, and prevents an older run from overwriting newer results.
 - Unknown costs and availability remain visible in comparisons and exports.
 - The preparation packet matches the current chosen branch and does not imply unverified submission or approval.
-- The demonstration completes the decision-to-export loop within three minutes. Record research latency and obtain a producer/location-manager review where possible; report measured results only.
+- Validate the complete decision-to-export loop. Record research latency and obtain a producer/location-manager review where possible; report measured results only.
 
-## 8. Judging focus and deferred work
+## 7. Judging focus and deferred work
 
 The official rubric weights technical implementation, design, potential impact, and idea quality equally. Demonstrate live research affecting decisions, a coherent canvas-to-export journey, a concrete production problem resolved, and an evidence-backed explanation of the tradeoff.
 

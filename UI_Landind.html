@@ -54,7 +54,7 @@ a{color:inherit}
 }
 .rail a span{width:15px;text-align:right;font-variant-numeric:tabular-nums;color:var(--fg-3)}
 .rail a:hover,.rail a:focus-visible{color:var(--fg);background:rgba(255,255,255,.05)}
-@media(max-width:1180px){.rail{display:none}}
+@media(max-width:1640px){.rail{display:none}}
 
 /* ---------- hero ---------- */
 .hero{padding:96px 0 56px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:56px;align-items:center}
@@ -130,6 +130,8 @@ a{color:inherit}
   backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);
   box-shadow:inset 0 1px 0 var(--hi), 0 20px 50px rgba(0,0,0,.42);}
 .node.sel{border-color:rgba(220,168,60,.55);box-shadow:inset 0 1px 0 var(--hi),0 0 0 3px rgba(220,168,60,.14),0 20px 50px rgba(0,0,0,.45)}
+.group-outline{position:absolute;border:1px dashed var(--line-2);border-radius:23px;pointer-events:none;background:rgba(233,238,220,.012)}
+.group-outline span{position:absolute;top:-11px;left:14px;color:var(--fg-3);font-size:10px;background:var(--ink-2);padding:2px 7px}
 .nhead{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--line)}
 .nhead h3{font-size:13.5px;font-weight:500;letter-spacing:-.005em}
 .nhead .sub{color:var(--fg-3);font-size:11.5px}
@@ -183,6 +185,8 @@ svg.links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .state .pip{margin-top:5px;width:9px;height:9px;border-radius:50%;flex:none;background:rgba(233,238,220,.18)}
 .state.done .pip{background:var(--moss)}
 .state.live .pip{background:var(--brass)}
+.state.blocked .pip{background:var(--clay)}
+@media(max-width:760px){.topbar{flex-wrap:wrap}.wrap{padding-left:14px;padding-right:14px}.pad{padding:16px}.sec-head p{flex-basis:100%}#s3 .pad{grid-template-columns:1fr!important}.rail{display:none}}
 .state h4{margin:0;font-size:13.5px;font-weight:500}
 .state p{font-size:12.5px;color:var(--fg-3);margin-top:2px}
 @media(prefers-reduced-motion:no-preference){
@@ -334,8 +338,8 @@ footer{margin-top:96px;border-top:1px solid var(--line);padding-top:28px;color:v
         <div class="state done"><span class="pip"></span><div><h4>Upload screenplay</h4><p>coastal_short.pdf received</p></div></div>
         <div class="state done"><span class="pip"></span><div><h4>Read and structure script</h4><p>18 pages · 7 scene headings · 4 speaking roles</p></div></div>
         <div class="state done"><span class="pip"></span><div><h4>Find material unknowns</h4><p>Dates, crew, travel limit, shoot days, and scene-specific choices</p></div></div>
-        <div class="state live"><span class="pip"></span><div><h4>Generate scene nodes</h4><p>Connect each scene to its excerpt and clarification hub</p></div></div>
-        <div class="state"><span class="pip"></span><div><h4>Wait for answers</h4><p>No location, permit, budget, or schedule agent starts early</p></div></div>
+        <div class="state blocked"><span class="pip"></span><div><h4>Needs your answer</h4><p>Script questions are ready. Scene generation waits for the required answers.</p></div></div>
+        <div class="state"><span class="pip"></span><div><h4>Generate scene nodes</h4><p>Queued until you answer and choose Generate scenes</p></div></div>
       </div>
 
       <div class="g" style="padding:20px">
@@ -404,9 +408,12 @@ footer{margin-top:96px;border-top:1px solid var(--line);padding-top:28px;color:v
     <div class="topbar"><span class="brand"><i></i>SceneAtlas</span><span class="crumb">Coastal short · creative plan</span><span class="sp"></span>
       <span class="chip clay"><i class="dot clay"></i>4 unresolved</span><span class="btn">Compare plans</span><span class="btn pri">Export packet</span></div>
 
-    <div class="canvas scrollx" style="height:850px">
-      <div class="plane" style="height:850px">
-        <svg class="links" viewBox="0 0 1180 850" preserveAspectRatio="none" aria-hidden="true">
+    <div class="canvas scrollx" style="height:930px">
+      <div class="plane" style="height:930px">
+        <div class="group-outline" style="left:23px;top:163px;width:362px;height:667px"><span>SCENE 1</span></div>
+        <div class="group-outline" style="left:408px;top:163px;width:362px;height:667px"><span>SCENE 2</span></div>
+        <div class="group-outline" style="left:793px;top:163px;width:362px;height:667px"><span>SCENE 3</span></div>
+        <svg class="links" viewBox="0 0 1180 930" preserveAspectRatio="none" aria-hidden="true">
           <path class="link" d="M590 130 C590 160 205 148 205 180"/><path class="link" d="M590 130 L590 180"/><path class="link" d="M590 130 C590 160 975 148 975 180"/>
           <path class="link dash" d="M205 286 L205 320"/><path class="link dash" d="M590 286 L590 320"/><path class="link dash" d="M975 286 L975 320"/>
           <path class="link dash" d="M205 486 L205 535"/><path class="link dash" d="M590 486 L590 535"/><path class="link dash" d="M975 486 L975 535"/>
@@ -421,7 +428,7 @@ footer{margin-top:96px;border-top:1px solid var(--line);padding-top:28px;color:v
 
         <div class="node" style="left:40px;top:320px;width:330px;background:rgba(220,168,60,.08)"><div class="nhead"><span class="dot moss"></span><div><h3>Scene 1 questions</h3><div class="sub">3 saved · none open</div></div></div><div class="nbody"><p class="note">Public sand or private cove? How many candidates? What should rank first?</p></div></div>
         <div class="node" style="left:425px;top:320px;width:330px;background:rgba(220,168,60,.08)"><div class="nhead"><span class="dot brass"></span><div><h3>Scene 2 questions</h3><div class="sub">2 saved · 1 follow-up</div></div></div><div class="nbody"><p style="font-size:13px">Only 2 of 5 met the brief. Widen to 90 mi, accept 2, or drop the target to 3?</p></div></div>
-        <div class="node" style="left:810px;top:320px;width:330px;background:rgba(220,168,60,.08);border-color:rgba(204,98,80,.5)"><div class="nhead"><span class="dot clay"></span><div><h3>Scene 3 questions</h3><div class="sub">1 saved · still unresolved</div></div></div><div class="nbody"><p style="font-size:13px">A practical diner or a dressed set? It changes the search and permit path.</p><div style="display:flex;gap:7px;margin-top:10px"><span class="btn">Practical</span><span class="btn">Set</span><span class="btn qt">Not sure</span></div></div>
+        <div class="node" style="left:810px;top:320px;width:330px;background:rgba(220,168,60,.08);border-color:rgba(204,98,80,.5)"><div class="nhead"><span class="dot clay"></span><div><h3>Scene 3 questions</h3><div class="sub">1 saved · still unresolved</div></div></div><div class="nbody"><p style="font-size:13px">A practical diner or a dressed set? It changes the search and permit path.</p><div style="display:flex;gap:7px;margin-top:10px"><span class="btn">Practical</span><span class="btn">Set</span><span class="btn qt">Not sure</span></div></div></div>
 
         <div class="node" style="left:70px;top:535px;width:270px"><div class="nbody"><div class="lbl">Saved answers</div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip moss">Public sand</span><span class="chip moss">3 candidates</span><span class="chip moss">Creative fit</span></div><p class="note" style="margin-top:8px">Change</p></div></div>
         <div class="node" style="left:455px;top:535px;width:270px"><div class="nbody"><div class="lbl">Saved answers</div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip moss">Golden hour required</span><span class="chip moss">5 candidates</span></div><p class="note" style="margin-top:8px">Change</p></div></div>
@@ -435,96 +442,6 @@ footer{margin-top:96px;border-top:1px solid var(--line);padding-top:28px;color:v
       </div>
     </div>
 
-    <div class="canvas scrollx" style="display:none" aria-hidden="true">
-      <div class="plane">
-        <svg class="links" viewBox="0 0 1180 820" preserveAspectRatio="none" aria-hidden="true">
-          <path class="link" d="M590 178 C 590 226, 205 216, 205 262"/>
-          <path class="link" d="M590 178 L 590 262"/>
-          <path class="link" d="M590 178 C 590 226, 975 216, 975 262"/>
-          <path class="link dash" d="M348 596 C 400 596, 410 596, 452 596"/>
-        </svg>
-
-        <div class="node" style="left:400px;top:44px;width:380px">
-          <div class="nhead"><span class="dot brass"></span><h3>coastal_short.pdf</h3><span style="flex:1"></span><span class="chip">Project</span></div>
-          <div class="nbody" style="padding-top:10px">
-            <div style="display:flex;gap:7px;flex-wrap:wrap">
-              <span class="chip"><i class="dot moss"></i>No drone</span>
-              <span class="chip"><i class="dot moss"></i>Crew of 12</span>
-              <span class="chip"><i class="dot moss"></i>Durations estimated</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- scene 1 -->
-        <div class="node" style="left:40px;top:262px;width:330px">
-          <div class="nhead"><span class="dot moss"></span><div><h3>Scene 1 · Ext. beach</h3><div class="sub">Day · dialogue · 2 pages</div></div></div>
-          <div class="nbody">
-            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px">
-              <span class="chip"><i class="dot moss"></i>Public sand</span>
-              <span class="chip"><i class="dot brass"></i>~4h</span>
-            </div>
-            <div class="g-flat" style="padding:11px 12px;margin-bottom:11px">
-              <div class="row" style="padding-top:0"><span class="muted">Candidates</span><span>3</span></div>
-              <div class="row"><span class="muted">Search radius</span><span>60 mi</span></div>
-              <div class="row" style="padding-bottom:0"><span class="muted">Rank by</span><span>Creative fit</span></div>
-            </div>
-            <div class="lbl">Locations found</div>
-            <div class="row" style="padding-top:2px"><span><i class="dot moss" style="display:inline-block;margin-right:7px"></i>Leo Carrillo SB</span><span class="chip moss">Locked</span></div>
-            <div class="row"><span class="muted">Point Mugu</span><span class="chip">$150/day</span></div>
-            <div class="row"><span class="muted">El Matador</span><span class="chip clay">Quote needed</span></div>
-          </div>
-        </div>
-
-        <!-- scene 2 -->
-        <div class="node sel" style="left:425px;top:262px;width:330px">
-          <div class="nhead"><span class="dot brass"></span><div><h3>Scene 2 · Ext. cliff</h3><div class="sub">Dusk · wide · 1 page</div></div></div>
-          <div class="nbody">
-            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px">
-              <span class="chip"><i class="dot moss"></i>No vehicles on sand</span>
-              <span class="chip"><i class="dot moss"></i>Golden hour</span>
-            </div>
-            <div class="g-flat" style="padding:11px 12px;margin-bottom:11px">
-              <div class="row" style="padding-top:0"><span class="muted">Candidates</span><span>5 asked · 2 found</span></div>
-              <div class="row"><span class="muted">Search radius</span><span>60 mi</span></div>
-              <div class="row" style="padding-bottom:0"><span class="muted">Rank by</span><span>Lower cost</span></div>
-            </div>
-            <div class="lbl">Locations found</div>
-            <div class="row" style="padding-top:2px"><span><i class="dot moss" style="display:inline-block;margin-right:7px"></i>Leo Carrillo SB</span><span class="chip brass">Shared</span></div>
-            <div class="row"><span class="muted">Point Dume</span><span class="chip">Access limited</span></div>
-            <div class="row" style="border-top:1px solid rgba(233,238,220,.07)">
-              <span class="note" style="color:#E8A395">Only 2 of 5 met the brief.</span><span class="btn qt">Widen search</span></div>
-          </div>
-        </div>
-
-        <!-- scene 3 -->
-        <div class="node" style="left:810px;top:262px;width:330px">
-          <div class="nhead"><span class="dot clay"></span><div><h3>Scene 3 · Int. diner</h3><div class="sub">Night · 3 pages</div></div></div>
-          <div class="nbody">
-            <div class="g-flat" style="padding:13px;margin-bottom:11px">
-              <div class="lbl">Waiting on you</div>
-              <p style="font-size:13.5px;line-height:1.5">A practical diner or a dressed set? It changes both the search and the permit.</p>
-              <div style="display:flex;gap:8px;margin-top:11px"><span class="btn">Practical</span><span class="btn">Set</span><span class="btn qt">Not sure yet</span></div>
-            </div>
-            <div class="row" style="padding-top:2px"><span class="muted">Search</span><span class="chip clay">Paused</span></div>
-            <div class="row"><span class="muted">Requirements</span><span class="chip clay">Jurisdiction unknown</span></div>
-            <div class="row" style="padding-bottom:0"><span class="muted">Cost so far</span><span class="muted">Not countable yet</span></div>
-          </div>
-        </div>
-
-        <div class="float" style="left:352px;top:580px;padding:5px 10px;font-size:11.5px;color:#EFCB81">One location, two scenes</div>
-
-        <div class="float tools"><b class="on">Move</b><b>Select</b><b>Note</b><b>Link</b></div>
-        <div class="float zoom"><span>−</span><span style="color:var(--fg)">68%</span><span>+</span><span style="color:var(--line-2)">|</span><span>Fit</span></div>
-        <div class="float mini" aria-hidden="true">
-          <i style="left:44px;top:12px;width:52px;height:11px"></i>
-          <i style="left:10px;top:38px;width:38px;height:44px"></i>
-          <i style="left:56px;top:38px;width:38px;height:44px"></i>
-          <i style="left:102px;top:38px;width:38px;height:44px;background:rgba(204,98,80,.5)"></i>
-          <i class="vp" style="left:4px;top:6px;width:112px;height:82px"></i>
-        </div>
-        <div class="float askbar"><span class="scope">Scene 2</span><span class="ph">Ask about this scene, or tell me what to change…</span><span class="btn pri">Send</span></div>
-      </div>
-    </div>
   </div>
   <p class="caption">The scope pill on the ask bar is not decoration — it is the blast radius of whatever you type next. Ask something that would touch both plans and it asks which one you meant.</p>
 </section>
@@ -583,7 +500,7 @@ footer{margin-top:96px;border-top:1px solid var(--line);padding-top:28px;color:v
             </div>
             <div class="g-flat" style="padding:11px 12px">
               <div style="font-size:13px;color:#EFCB81">parks.ca.gov fee schedule</div>
-              <p class="note">Fetched 2 hours ago · reused across both plans</p>
+              <p class="note">Illustrative source state · reused across both plans</p>
             </div>
             <p class="note" style="margin-top:12px">Finding a location is not permission to film there.</p>
           </div>
@@ -612,24 +529,24 @@ footer{margin-top:96px;border-top:1px solid var(--line);padding-top:28px;color:v
       <div class="grid2">
         <div class="g" style="padding:20px">
           <div style="display:flex;align-items:baseline;gap:10px">
-            <h3 style="font-size:16px">Budget plan</h3><span class="chip">Cap $4,000</span>
+            <h3 style="font-size:16px">Budget plan</h3><span class="chip">Cap $8,000</span>
           </div>
           <div class="hr"></div>
           <div class="lbl">Proposed order</div>
           <div class="g-flat" style="padding:12px 13px;margin-bottom:9px">
-            <div style="display:flex;justify-content:space-between;font-size:13.5px"><span>Day 1 · 07:00–13:00</span><span class="muted">Scenes 1, 2</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13.5px"><span>Day 1 · daylight into dusk</span><span class="muted">Scenes 1, 2</span></div>
             <p class="note" style="margin-top:3px">Leo Carrillo — grouped, saves one company move</p>
           </div>
           <div class="g-flat" style="padding:12px 13px">
-            <div style="display:flex;justify-content:space-between;font-size:13.5px"><span>Day 1 · 19:00–23:00</span><span class="muted">Scene 3</span></div>
-            <p class="note" style="margin-top:3px">Rae's Diner — duration estimated from page count</p>
+            <div style="display:flex;justify-content:space-between;font-size:13.5px"><span>Day 2 · controlled night</span><span class="muted">Scene 3</span></div>
+            <p class="note" style="margin-top:3px">Stage 4 backlot — proposed set alternative</p>
           </div>
           <div class="hr"></div>
-          <div class="kv"><span class="sec2">Costs with a source</span><span>$1,410</span></div>
-          <div class="kv"><span class="sec2">Estimated</span><span style="color:#EFCB81">$780</span></div>
+          <div class="kv"><span class="sec2">Known costs · sample</span><span>$5,960</span></div>
+          <div class="kv"><span class="sec2">Estimated additions</span><span style="color:#EFCB81">$1,500</span></div>
           <div class="kv"><span class="sec2">Still unquoted</span><span style="color:#E8A395">2 items</span></div>
-          <div class="kv"><span class="sec2">Moves · days</span><span>1 · 1</span></div>
-          <p class="note" style="margin-top:12px">Can't confirm this fits $4,000 while two costs are unquoted.</p>
+          <div class="kv"><span class="sec2">Moves · days</span><span>1 · 2</span></div>
+          <p class="note" style="margin-top:12px">Partial total $7,460. Budget compliance is unconfirmed while two costs are unquoted.</p>
         </div>
 
         <div class="g" style="padding:20px">
@@ -644,23 +561,23 @@ footer{margin-top:96px;border-top:1px solid var(--line);padding-top:28px;color:v
           </div>
           <div class="g-flat" style="padding:12px 13px;margin-bottom:9px">
             <div style="display:flex;justify-content:space-between;font-size:13.5px"><span>Day 2 · 16:00–19:30</span><span class="muted">Scene 2</span></div>
-            <p class="note" style="margin-top:3px">Point Dume — golden hour is a hard constraint here</p>
+            <p class="note" style="margin-top:3px">Point Mugu — golden hour is a hard constraint here</p>
           </div>
           <div class="g-flat" style="padding:12px 13px">
-            <div style="display:flex;justify-content:space-between;font-size:13.5px"><span>Day 2 · 21:00–01:00</span><span class="muted">Scene 3</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13.5px"><span>Day 3 · night</span><span class="muted">Scene 3</span></div>
             <p class="note" style="margin-top:3px">Rae's Diner — duration estimated</p>
           </div>
           <div class="hr"></div>
-          <div class="kv"><span class="sec2">Costs with a source</span><span>$2,940</span></div>
-          <div class="kv"><span class="sec2">Estimated</span><span style="color:#EFCB81">$1,250</span></div>
+          <div class="kv"><span class="sec2">Known costs · sample</span><span>$8,440</span></div>
+          <div class="kv"><span class="sec2">Estimated additions</span><span style="color:#EFCB81">$2,500</span></div>
           <div class="kv"><span class="sec2">Still unquoted</span><span style="color:#E8A395">3 items</span></div>
-          <div class="kv"><span class="sec2">Moves · days</span><span>3 · 2</span></div>
-          <p class="note" style="margin-top:12px">Stronger visual match. Costs compared on partial data.</p>
+          <div class="kv"><span class="sec2">Moves · days</span><span>2 · 3</span></div>
+          <p class="note" style="margin-top:12px">Partial total $10,940. Stronger visual match; unquoted costs remain visible.</p>
         </div>
       </div>
 
       <div class="g" style="padding:18px 20px;margin-top:16px;display:flex;gap:22px;align-items:center;flex-wrap:wrap">
-        <p style="font-size:13.5px;flex:1 1 320px">Budget plan is cheaper on everything currently sourced, and finishes a day earlier. Creative plan buys the golden-hour cliff and the low tide, at three more unquoted items.</p>
+        <p style="font-size:13.5px;flex:1 1 320px">Budget plan has a lower partial total and one fewer shooting day. Creative plan favors the cove, cliff, and practical diner. Unknown costs stay outside both totals.</p>
         <span class="btn">Keep both</span><span class="btn pri">Take the creative plan forward</span>
       </div>
     </div>
@@ -714,9 +631,9 @@ footer{margin-top:96px;border-top:1px solid var(--line);padding-top:28px;color:v
               <div style="display:flex;gap:10px;align-items:flex-start">
                 <span class="dot clay" style="margin-top:6px"></span>
                 <div>
-                  <p style="font-size:13.5px">Scene 2 needs golden hour, which ends 22 minutes after sunset on 15 Nov. It can't both wait for the light and finish before dark.</p>
+                  <p style="font-size:13.5px">Scene 3 is written for night, but this rule asks the whole plan to finish before dark. Keep the night scene, change its look, or apply the wrap limit only to the beach scenes?</p>
                   <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-                    <span class="btn">Golden hour wins</span><span class="btn">Finishing early wins</span><span class="btn qt">Move it to Day 1</span>
+                    <span class="btn">Keep night scene</span><span class="btn">Change the look</span><span class="btn qt">Beach scenes only</span>
                   </div>
                 </div>
               </div>
@@ -794,6 +711,7 @@ footer{margin-top:96px;border-top:1px solid var(--line);padding-top:28px;color:v
 <footer>
   <span>SceneAtlas — nine screens, decision to packet</span>
   <span>Bricolage Grotesque and Archivo · brass, moss, clay on graphite</span>
+  <p>UI prototype · prices, locations, dates, research states, and documents are illustrative sample data.</p>
 </footer>
 
 </div>

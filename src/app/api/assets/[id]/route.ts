@@ -35,6 +35,11 @@ export async function GET(
     { headers, cache: "no-store" },
   );
   const resultHeaders = new Headers(response.headers);
+  // Fetch already decoded the body. The outgoing server owns compression and
+  // framing; forwarding these headers makes browsers decode the bytes twice.
+  resultHeaders.delete("Content-Encoding");
+  resultHeaders.delete("Content-Length");
+  resultHeaders.delete("Transfer-Encoding");
   resultHeaders.set("Cache-Control", "private, no-store");
   resultHeaders.set("Vary", "Cookie");
   resultHeaders.set("X-Content-Type-Options", "nosniff");

@@ -52,6 +52,27 @@ describe("authenticated PDF preview and download", () => {
     expect(await response.text()).toBe("File access denied");
   });
 
+  it("serves a decoded manifest without upstream compression or wire-length headers", async () => {
+    // Server fetch decodes the body but retains the upstream transport headers.
+    fetchFile.mockResolvedValue(
+      new Response(JSON.stringify({ sourceVersion: "saved-version" }), {
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Encoding": "gzip",
+          "Content-Length": "55",
+          "Transfer-Encoding": "chunked",
+          "Content-Disposition": 'attachment; filename="manifest.json"',
+        },
+      }),
+    );
+    const response = await read("attachment");
+    expect(response.headers.get("Content-Encoding")).toBeNull();
+    expect(response.headers.get("Content-Length")).toBeNull();
+    expect(response.headers.get("Transfer-Encoding")).toBeNull();
+    expect(response.headers.get("Content-Type")).toBe("application/json");
+    expect(await response.json()).toEqual({ sourceVersion: "saved-version" });
+  });
+
   it.each(["inline", "attachment"])(
     "serves %s PDF with private headers and browser range support",
     async (disposition) => {

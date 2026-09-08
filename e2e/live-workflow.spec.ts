@@ -94,6 +94,12 @@ test("live screenplay becomes a sourced plan and downloadable draft packet", asy
               else if (key.startsWith("permit_lead_time_conflict_"))
                 answer =
                   "Use ten business days as our internal planning buffer for this illustrative test. Preserve both official source statements; this buffer is not a determination of the authority's actual deadline or an approval.";
+              else if (
+                key.startsWith("advance_notice_") ||
+                key.startsWith("permit_lead_time_")
+              )
+                answer =
+                  "Leave the park-specific advance notice unresolved. For this illustrative preparation draft, use ten business days as our producer-selected internal planning buffer only. This is not a verified park requirement; retain the need to contact the park coordinator before committing to production or applying.";
               else if (key.startsWith("fire_requirements_confirmation_"))
                 answer =
                   "Confirmed for this illustrative production: no open flames, pyrotechnics, fire effects, special effects, generators or special lighting.";

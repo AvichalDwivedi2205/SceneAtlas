@@ -23,8 +23,7 @@ export const sourceSchema = z.object({
   excerpt: z.string().max(4000),
   retrievedAt: z.number(),
   searchId: z.string().optional(),
-  provider: z.enum(["parallel", "exa", "official", "user"]),
-  fallbackReason: z.string().max(200).optional(),
+  provider: z.enum(["parallel", "official", "user"]),
   cached: z.boolean().default(false),
 });
 export type Source = z.infer<typeof sourceSchema>;

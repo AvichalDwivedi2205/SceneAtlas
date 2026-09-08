@@ -52,10 +52,6 @@ def deploy():
         max_instances=4,
         container_concurrency=8,
     )
-    fallback_enabled = os.getenv("EXA_FALLBACK_ENABLED", "false").lower() == "true"
-    options["env_vars"]["EXA_FALLBACK_ENABLED"] = str(fallback_enabled).lower()
-    if fallback_enabled:
-        options["env_vars"]["EXA_API_KEY"] = SecretRef(secret="sceneatlas-exa-api-key", version="latest")
     resource = os.getenv("AGENT_RUNTIME_RESOURCE", "").strip()
     if resource:
         remote = agent_engines.get(resource).update(agent_engine=app, **options)

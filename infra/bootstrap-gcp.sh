@@ -32,10 +32,6 @@ gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" --member="service
 for SCENEATLAS_SECRET in sceneatlas-parallel-api-key sceneatlas-agent-callback; do
   gcloud secrets add-iam-policy-binding "$SCENEATLAS_SECRET" --member="serviceAccount:${SCENEATLAS_AGENT_SA}" --role="roles/secretmanager.secretAccessor" --condition=None >/dev/null
 done
-if [ "${EXA_FALLBACK_ENABLED:-false}" = "true" ]; then
-  gcloud secrets describe sceneatlas-exa-api-key >/dev/null 2>&1 || gcloud secrets create sceneatlas-exa-api-key --replication-policy=automatic
-  gcloud secrets add-iam-policy-binding sceneatlas-exa-api-key --member="serviceAccount:${SCENEATLAS_AGENT_SA}" --role="roles/secretmanager.secretAccessor" --condition=None >/dev/null
-fi
 for SCENEATLAS_SECRET in sceneatlas-agent-callback sceneatlas-bridge-dispatch; do
   gcloud secrets add-iam-policy-binding "$SCENEATLAS_SECRET" --member="serviceAccount:${SCENEATLAS_BRIDGE_SA}" --role="roles/secretmanager.secretAccessor" --condition=None >/dev/null
 done

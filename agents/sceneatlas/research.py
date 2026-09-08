@@ -1,4 +1,4 @@
-"""Parallel is the mandatory primary discovery provider."""
+"""Discover and retrieve production evidence using Parallel."""
 import asyncio
 import ipaddress
 import json
@@ -6,7 +6,6 @@ import os
 import re
 import socket
 import time
-import httpx
 from urllib.parse import urlparse
 from parallel import AsyncParallel, APIConnectionError, APIStatusError
 
@@ -63,7 +62,7 @@ def research_request(target: dict, answers: list[dict]) -> tuple[str, list[str]]
                        "site:parks.ca.gov filming permit location fees"]
 
 def provider_failure(error: Exception) -> str | None:
-    """Fail over only for exhausted capacity or transient availability failures."""
+    """Identify capacity and transient errors while preserving auth/config failures."""
     if isinstance(error, APIConnectionError):
         return "Parallel connection or timeout failure"
     if isinstance(error, APIStatusError):
@@ -73,37 +72,15 @@ def provider_failure(error: Exception) -> str | None:
             return "Parallel service temporarily unavailable"
     return None
 
-async def exa_search(objective: str, queries: list[str], reason: str) -> dict:
-    """Use the producer-enabled backup and preserve Exa's actual request ID."""
-    key = os.getenv("EXA_API_KEY", "").strip()
-    if not key:
-        raise RuntimeError("Exa fallback is enabled but EXA_API_KEY is not configured.")
-    async with httpx.AsyncClient(timeout=45) as client:
-        response = await client.post("https://api.exa.ai/search", headers={"x-api-key": key}, json={
-            "query": objective[:8000], "additionalQueries": queries[:4], "type": "auto", "numResults": 8,
-            "contents": {"text": True},
-        })
-        if response.status_code != 200:
-            raise RuntimeError(f"{reason}. Exa fallback also failed (HTTP {response.status_code}); retry later or check provider capacity.")
-        data = response.json()
-    if not data.get("requestId"):
-        raise RuntimeError("Exa response did not include a request ID; research was not published.")
-    return {"provider": "exa", "searchId": f"exa_{data['requestId']}", "retrievedAt": int(time.time()*1000), "fallbackReason": reason,
-            "results": [{"url": r["url"], "title": r.get("title") or r["url"],
-                         "excerpt": (r.get("text") or "\n".join(r.get("highlights") or []))[:6000]}
-                        for r in data.get("results", [])[:8]]}
-
 async def search_sources(objective: str, queries: list[str]) -> dict:
-    """Start every discovery with Parallel; use Exa only when explicitly enabled."""
+    """Use Parallel discovery and surface actionable capacity failures."""
     try:
         return await parallel_search(objective, queries)
     except (APIConnectionError, APIStatusError) as error:
         reason = provider_failure(error)
         if not reason:
             raise
-        if os.getenv("EXA_FALLBACK_ENABLED", "false").lower() != "true":
-            raise RuntimeError(f"{reason}. Exa fallback is disabled; retry later or check provider capacity.") from error
-        return await exa_search(objective, queries, reason)
+        raise RuntimeError(f"{reason}. Retry later or check Parallel account capacity.") from error
 
 async def parallel_extract(urls: list[str]) -> dict:
     """Read selected public evidence pages with Parallel Extract."""
@@ -150,9 +127,6 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
         observed = discovered[source["url"]]
         source.update(title=observed["title"], excerpt=observed["excerpt"][:4000], retrievedAt=evidence["retrievedAt"],
                       searchId=evidence["searchId"], provider=evidence.get("provider", "parallel"), cached=False)
-        source.pop("fallbackReason", None)
-        if evidence.get("fallbackReason"):
-            source["fallbackReason"] = evidence["fallbackReason"]
     for location in result.get("locations", []):
         for source in location.get("sources", []):
             if source["url"] not in observed_urls:

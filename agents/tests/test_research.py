@@ -1,9 +1,17 @@
 import json
 import httpx
 import pytest
-from parallel import AsyncParallel, RateLimitError, AuthenticationError
+from parallel import AsyncParallel, APIConnectionError, APIStatusError, AuthenticationError, BadRequestError, PermissionDeniedError
 
 from sceneatlas import research
+
+
+def use_parallel_transport(monkeypatch, respond):
+    """Exercise the installed SDK, including its real retry and error mappings."""
+    monkeypatch.setenv("PARALLEL_API_KEY", "test-only")
+    monkeypatch.delenv("PARALLEL_BASE_URL", raising=False)
+    monkeypatch.setattr(research, "AsyncParallel", lambda **kwargs: AsyncParallel(
+        **kwargs, http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))))
 
 
 @pytest.mark.asyncio
@@ -18,16 +26,19 @@ async def test_search_uses_installed_sdk_and_preserves_runtime_provenance(monkey
             "warnings": None,
         })
 
-    client = AsyncParallel(api_key="test-only", http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)))
-    monkeypatch.setenv("PARALLEL_API_KEY", "test-only")
-    monkeypatch.setattr(research, "AsyncParallel", lambda **_: client)
-    result = await research.parallel_search("Find official filming guidance " * 400, ["state filming permits"])
-    assert requests[0].url.path == "/v1/search"
+    use_parallel_transport(monkeypatch, respond)
+    result = await research.search_sources("Find official filming guidance " * 400, ["state filming permits"])
+    assert [str(request.url) for request in requests] == ["https://api.parallel.ai/v1/search"]
     assert len(json.loads(requests[0].content)["objective"]) <= 5000
     assert result["searchId"] == "search-live-contract"
     assert result["retrievedAt"] > 0
     assert result["results"][0]["excerpt"] == "Observed source text"
-    await client.close()
+    normalized = research.normalize_sources({"locations": [{"sources": [{"url": result["results"][0]["url"]}], "costs": [], "requirements": []}]}, result)
+    source = normalized["locations"][0]["sources"][0]
+    assert source["provider"] == "parallel"
+    assert source["searchId"] == result["searchId"]
+    assert source["retrievedAt"] == result["retrievedAt"]
+    assert source["excerpt"] == "Observed source text"
 
 
 def test_requirements_search_retains_production_facts_without_old_page_text():
@@ -62,34 +73,59 @@ def test_requirements_refresh_preserves_saved_provenance_without_claiming_new_re
 
 
 @pytest.mark.asyncio
-async def test_exa_fallback_requires_opt_in_and_does_not_hide_auth_failures(monkeypatch):
-    calls = []
-    response = httpx.Response(429, request=httpx.Request("POST", "https://api.parallel.ai/v1/search"))
+@pytest.mark.parametrize("failure, message, attempts", [
+    (402, "quota or rate limit", 1),
+    (429, "quota or rate limit", 3),
+    (500, "temporarily unavailable", 3),
+    (503, "temporarily unavailable", 3),
+    ("connect", "connection or timeout", 3),
+    ("timeout", "connection or timeout", 3),
+])
+async def test_capacity_and_transient_failures_remain_on_parallel(monkeypatch, failure, message, attempts):
+    requests = []
 
-    async def limited(*_):
-        raise RateLimitError("Rate limit", response=response, body={})
+    def respond(request):
+        requests.append(request)
+        if failure == "connect":
+            raise httpx.ConnectError("Connection unavailable", request=request)
+        if failure == "timeout":
+            raise httpx.ReadTimeout("Request timed out", request=request)
+        return httpx.Response(failure, headers={"retry-after-ms": "1"}, json={"error": "Provider unavailable"})
 
-    async def backup(objective, queries, reason):
-        calls.append(reason)
-        return {"provider": "exa", "searchId": "exa-request", "fallbackReason": reason}
+    use_parallel_transport(monkeypatch, respond)
+    with pytest.raises(RuntimeError, match=message) as caught:
+        await research.search_sources("Find filming guidance", ["State permits"])
+    assert "Retry later or check Parallel account capacity" in str(caught.value)
+    assert isinstance(caught.value.__cause__, (APIConnectionError, APIStatusError))
+    assert [str(request.url) for request in requests] == ["https://api.parallel.ai/v1/search"] * attempts
 
-    monkeypatch.setattr(research, "parallel_search", limited)
-    monkeypatch.setattr(research, "exa_search", backup)
-    monkeypatch.setenv("EXA_FALLBACK_ENABLED", "false")
-    with pytest.raises(RuntimeError, match="disabled"):
-        await research.search_sources("Test", ["Test"])
-    assert calls == []
-    monkeypatch.setenv("EXA_FALLBACK_ENABLED", "true")
-    assert (await research.search_sources("Test", ["Test"]))["provider"] == "exa"
-    assert len(calls) == 1
 
-    async def unauthorized(*_):
-        raise AuthenticationError("Invalid key", response=httpx.Response(401, request=response.request), body={})
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status, error_type", [(400, BadRequestError), (401, AuthenticationError), (403, PermissionDeniedError)])
+async def test_request_and_auth_failures_are_not_hidden_or_retried(monkeypatch, status, error_type):
+    requests = []
 
-    monkeypatch.setattr(research, "parallel_search", unauthorized)
-    with pytest.raises(AuthenticationError):
-        await research.search_sources("Test", ["Test"])
-    assert len(calls) == 1
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(status, json={"error": "Request or account configuration must be fixed"})
+
+    use_parallel_transport(monkeypatch, respond)
+    with pytest.raises(error_type) as caught:
+        await research.search_sources("Find filming guidance", ["State permits"])
+    assert caught.value.status_code == status
+    assert research.provider_failure(caught.value) is None
+    assert [str(request.url) for request in requests] == ["https://api.parallel.ai/v1/search"]
+
+
+@pytest.mark.asyncio
+async def test_missing_parallel_key_stops_before_network_access(monkeypatch):
+    def unexpected_client(**_):
+        pytest.fail("Missing credentials must stop before creating a network client")
+
+    monkeypatch.delenv("PARALLEL_API_KEY", raising=False)
+    monkeypatch.setattr(research, "AsyncParallel", unexpected_client)
+    with pytest.raises(RuntimeError, match="Add PARALLEL_API_KEY to the agent deployment"):
+        await research.search_sources("Find filming guidance", ["State permits"])
 
 
 @pytest.mark.parametrize("assumptions", ["Using the mid-range of published parking fees for one assumed vehicle.", "Assumes one vehicle for the crew.", "Assume a monitor is assigned for six hours."])
@@ -118,22 +154,22 @@ def test_another_parks_official_form_does_not_establish_this_parks_rules():
 
 
 @pytest.mark.asyncio
-async def test_exa_transport_and_normalization_preserve_backup_provenance(monkeypatch):
+async def test_extract_uses_parallel_sdk_and_preserves_partial_results(monkeypatch):
     requests = []
     url = "https://film.ca.gov/state-permits/"
+    missing_url = "https://parks.ca.gov/unavailable"
+    failure = {"url": missing_url, "error_type": "HTTP_ERROR", "http_status_code": 503, "content": None}
 
     def respond(request):
         requests.append(request)
-        return httpx.Response(200, json={"requestId": "actual-response-id", "results": [{"url": url, "title": "Observed official guidance", "text": "Retrieved permit guidance"}]})
+        return httpx.Response(200, json={"extract_id": "extract-observed", "session_id": "session-test", "results": [{"url": url, "title": "Observed official guidance", "excerpts": ["Retrieved permit guidance"], "full_content": "x" * 20_000}], "errors": [failure]})
 
-    client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
-    monkeypatch.setenv("EXA_API_KEY", "test-only")
-    monkeypatch.setattr(research.httpx, "AsyncClient", lambda **_: client)
-    evidence = await research.exa_search("Find filming guidance", ["State film permits"], "Parallel quota or rate limit reached")
-    assert str(requests[0].url) == "https://api.exa.ai/search"
-    assert evidence["searchId"] == "exa_actual-response-id"
-    result = research.normalize_sources({"locations": [{"sources": [{"url": url}], "costs": [], "requirements": []}]}, evidence)
-    source = result["locations"][0]["sources"][0]
-    assert source["provider"] == "exa"
-    assert source["fallbackReason"] == "Parallel quota or rate limit reached"
-    assert source["excerpt"] == "Retrieved permit guidance"
+    use_parallel_transport(monkeypatch, respond)
+    monkeypatch.setattr(research, "public_url", lambda value: value)
+    evidence = await research.parallel_extract([url, missing_url])
+    assert [str(request.url) for request in requests] == ["https://api.parallel.ai/v1/extract"]
+    assert json.loads(requests[0].content)["urls"] == [url, missing_url]
+    assert evidence["results"][0]["url"] == url
+    assert evidence["results"][0]["excerpts"] == ["Retrieved permit guidance"]
+    assert len(evidence["results"][0]["full_content"]) == 12_000
+    assert evidence["errors"] == [failure]

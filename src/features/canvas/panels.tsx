@@ -37,15 +37,10 @@ export function SourceList({ sources }: { sources: Source[] }) {
           </div>
           <p>{s.excerpt.slice(0, 230)}</p>
           <small>
-            {s.provider === "exa"
-              ? "Exa fallback"
-              : s.provider === "parallel"
-                ? "Parallel"
-                : s.provider}{" "}
+            {s.provider === "parallel" ? "Parallel" : s.provider}{" "}
             · {new URL(s.url).hostname} · {s.cached ? "Cached" : "Retrieved"}{" "}
             {new Date(s.retrievedAt).toLocaleDateString()}
           </small>
-          {s.fallbackReason && <small>{s.fallbackReason}</small>}
         </a>
       ))}
     </div>

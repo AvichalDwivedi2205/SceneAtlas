@@ -284,14 +284,14 @@ FADE OUT.`);
     for (const location of locations) {
       expect(location.data.availability).toBe("unverified");
       expect(location.data.sources.length).toBeGreaterThan(0);
-      for (const source of location.data.sources)
-        expect(source.searchId).toMatch(
-          source.provider === "exa" ? /^exa_/ : /^search_/,
-        );
+      for (const source of location.data.sources) {
+        expect(source.provider).toBe("parallel");
+        expect(source.searchId).toMatch(/^search_/);
+      }
     }
     const events = await client.query(api.runs.events, { runId: researchRun });
     expect(
-      events.some((event) => /^(search_|exa_)/.test(event.providerId ?? "")),
+      events.some((event) => /^search_/.test(event.providerId ?? "")),
     ).toBe(true);
     const location = locations[0];
     await client.mutation(api.planning.select, {

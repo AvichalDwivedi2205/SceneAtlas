@@ -240,20 +240,15 @@ class SceneAtlasAgent(BaseAgent):
             evidence=await FunctionTool(search_sources).run_async(args={"objective":objective,"queries":queries},tool_context=ToolContext(ctx,function_call_id=call_id))
             yield Event(invocation_id=ctx.invocation_id, author=self.name,content=types.Content(parts=[types.Part(function_response=types.FunctionResponse(id=call_id,name="search_sources",response=evidence))]))
             task["searchEvidence"]=evidence
-            fallback = evidence.get("provider") == "exa"
-            activity = f"Using Exa fallback · {evidence['fallbackReason']}" if fallback else "Checking source requirements"
-            yield Event(invocation_id=ctx.invocation_id, author=self.name,actions=EventActions(state_delta={"activity":activity,"searchId":evidence["searchId"]}))
-            if fallback:
-                task["extractedEvidence"] = {"results": evidence["results"], "errors": []}
-            else:
-                try:
-                    task["extractedEvidence"]=await FunctionTool(parallel_extract).run_async(args={"urls":[r["url"] for r in evidence["results"][:5]]},tool_context=ToolContext(ctx))
-                except Exception as error:
-                    reason = provider_failure(error)
-                    if not reason:
-                        raise
-                    task["extractedEvidence"] = {"results": [], "errors": [f"{reason}; using retrieved search excerpts."]}
-                    yield Event(invocation_id=ctx.invocation_id, author=self.name,actions=EventActions(state_delta={"activity":"Page extraction unavailable · reviewing search excerpts"}))
+            yield Event(invocation_id=ctx.invocation_id, author=self.name,actions=EventActions(state_delta={"activity":"Checking source requirements","searchId":evidence["searchId"]}))
+            try:
+                task["extractedEvidence"]=await FunctionTool(parallel_extract).run_async(args={"urls":[r["url"] for r in evidence["results"][:5]]},tool_context=ToolContext(ctx))
+            except Exception as error:
+                reason = provider_failure(error)
+                if not reason:
+                    raise
+                task["extractedEvidence"] = {"results": [], "errors": [f"{reason}; using retrieved search excerpts."]}
+                yield Event(invocation_id=ctx.invocation_id, author=self.name,actions=EventActions(state_delta={"activity":"Page extraction unavailable · reviewing search excerpts"}))
         desired={"ingest":["script","question"],"scenes":["scene","question"],"research":["location","question"],"requirements":["location","question"],"schedule":["question"]}.get(kind,["scene","plan","question","note"])
         task["entitySchemas"]=[s for s in CONTRACT.get("oneOf",CONTRACT.get("anyOf",[])) if s.get("properties",{}).get("kind",{}).get("const") in desired]
         # Keep model context bounded and avoid handing credentials or transport details to the model.

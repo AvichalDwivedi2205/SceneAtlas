@@ -30,7 +30,7 @@ Convex is authoritative for boards, memberships, entity revisions, dependencies,
 - Uploaded PDF/text screenplay retained as source; exact scene excerpts must match extracted pages.
 - Full-screenplay breakdown uses page-aware scene indexing, bounded model batches, saved-batch retry, and atomic publication. Large boards use a compact scene grid and visible-card rendering. See [processing limits and scale acceptance](docs/SCREENPLAY_SCALE.md).
 - Explicit clarification checkpoint before scene and research stages.
-- Location discovery always starts with Parallel Search. Optional Exa fallback handles quota, timeout, and service outages when explicitly enabled. Provider names, request IDs, and fallback reasons stay attached to sources. Returned URLs are allowlisted into agent results; official pilot requirements need CFC state-permit guidance or the named park’s own official page. Other park references remain unverified.
+- Web research uses Parallel Search and Extract only. Capacity limits, exhausted retries, and service failures remain visible; no alternate search provider is called. Request IDs, retrieval times, and cache status stay attached to sources. Returned URLs are allowlisted into agent results; official pilot requirements need CFC state-permit guidance or the named park’s own official page. Other park references remain unverified.
 - Costs preserve published, quoted, estimated, and unknown states. Modeled rates and assumed quantities remain estimates. Shared charges deduplicate by documented coverage key, with conflicting units/quantities kept visible. Other currencies stay outside plan totals until conversion is supplied.
 - Budget and Creative plans keep their own selections, locks, constraints, totals, and schedules.
 - Material edits create a preview, mark dependency outputs stale, regenerate into staged results, apply only against unchanged revisions, and support conflict-safe undo.
@@ -78,7 +78,7 @@ export GOOGLE_CLOUD_LOCATION="us-central1"
 ./infra/bootstrap-gcp.sh
 ```
 
-Add `sceneatlas-parallel-api-key`, `sceneatlas-agent-callback`, and `sceneatlas-bridge-dispatch` secret versions as prompted. For optional Exa backup, set `EXA_FALLBACK_ENABLED=true` before bootstrap/deploy and add an `EXA_API_KEY` value to Secret Manager secret `sceneatlas-exa-api-key`. The default is disabled; this deployment enables it at the project owner's request. Deploy managed ADK runtime, then bridge:
+Add `sceneatlas-parallel-api-key`, `sceneatlas-agent-callback`, and `sceneatlas-bridge-dispatch` secret versions as prompted. Deploy the managed ADK runtime, then the bridge:
 
 ```bash
 export CONVEX_SITE_URL="https://your-deployment.convex.site"
@@ -93,7 +93,7 @@ The current deployed development resources and smoke-test status are recorded in
 Cloud controls:
 
 - Distinct agent, bridge, and task service accounts.
-- Secret Manager references for Parallel, optional Exa, and both HMAC secrets.
+- Secret Manager references for Parallel and both HMAC secrets.
 - Signed, five-minute Convex dispatch window and deterministic Cloud Task name.
 - Google OIDC verification on worker route with exact audience and service-account email.
 - Signed callbacks reject stale attempt, changed inputs, removed access, duplicate sequence, and oversized artifacts.

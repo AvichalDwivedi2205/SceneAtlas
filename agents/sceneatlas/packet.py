@@ -225,8 +225,7 @@ def build_packet(task: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
     for index, source in enumerate(manifest["sources"], 1):
         retrieved = datetime.fromtimestamp(source["retrievedAt"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         cached = " · Reused evidence" if source.get("cached") else ""
-        fallback = f" · {_clean(source['fallbackReason'])}" if source.get("fallbackReason") else ""
-        story.append(Paragraph(f'{index}. <link href="{escape(source["url"], quote=True)}" color="#48613b">{_clean(source["title"])}</link><br/>{_clean(source["excerpt"])}<br/>Retrieved: {_clean(retrieved)} · Provider: {_clean(source["provider"])}{cached}{fallback}', tiny))
+        story.append(Paragraph(f'{index}. <link href="{escape(source["url"], quote=True)}" color="#48613b">{_clean(source["title"])}</link><br/>{_clean(source["excerpt"])}<br/>Retrieved: {_clean(retrieved)} · Provider: {_clean(source["provider"])}{cached}', tiny))
     story.append(Spacer(1, 14))
     story.append(Paragraph(f"Manifest preserves {len(manifest['recordVersions'])} source record versions. Download the accompanying JSON for machine-readable provenance.", tiny))
     doc.build(story, onFirstPage=footer, onLaterPages=footer)

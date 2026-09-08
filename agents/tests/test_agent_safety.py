@@ -173,19 +173,25 @@ def test_research_requires_real_production_area_on_legacy_boards():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("always_invalid", [False, True])
-async def test_invalid_research_quantity_is_repaired_without_repeating_search(monkeypatch, always_invalid):
+@pytest.mark.parametrize("extract_status", [200, 429, 401])
+async def test_invalid_research_quantity_is_repaired_without_repeating_retrieval(monkeypatch, always_invalid, extract_status):
     import json
+    import httpx
     from types import SimpleNamespace
     from google.adk.agents import LlmAgent
     from google.adk.events import Event
     from google.genai import types
+    from parallel import AuthenticationError, RateLimitError
     from sceneatlas import agent
 
     task = {"run": {"_id": "run", "kind": "research", "targetId": "scene"}, "entities": [
         {"_id": "scene", "kind": "scene", "data": {"kind": "scene", "setting": "Beach", "needs": ["Open sand"], "candidateCount": 1}},
         {"kind": "question", "data": {"key": "search_area", "answer": "Los Angeles County", "resolution": "answered"}},
     ]}
-    model_calls, searches = [], []
+    model_calls, searches, extractions = [], [], []
+    source_url = "https://film.ca.gov/state-permits/"
+    search_evidence = {"provider": "parallel", "searchId": "search_test", "retrievedAt": 1, "results": [{"url": source_url, "title": "Official", "excerpt": "Observed search evidence"}]}
+    extracted_evidence = {"results": [{"url": source_url, "title": "Official", "excerpts": ["Observed page evidence"]}], "errors": []}
 
     class Backend:
         def __init__(self, *_):
@@ -196,8 +202,16 @@ async def test_invalid_research_quantity_is_repaired_without_repeating_search(mo
             return task
 
     async def tool(self, *, args, tool_context):
-        searches.append(args)
-        return {"provider": "exa", "fallbackReason": "Test fixture", "searchId": "exa_test", "retrievedAt": 1, "results": [{"url": "https://film.ca.gov/state-permits/", "title": "Official", "excerpt": "Observed evidence"}]}
+        if self.name == "search_sources":
+            searches.append(args)
+            return search_evidence
+        assert self.name == "parallel_extract"
+        extractions.append(args)
+        if extract_status != 200:
+            response = httpx.Response(extract_status, request=httpx.Request("POST", "https://api.parallel.ai/v1/extract"))
+            error_type = RateLimitError if extract_status == 429 else AuthenticationError
+            raise error_type("Fixture extract failure", response=response, body={})
+        return extracted_evidence
 
     async def model(self, ctx):
         model_calls.append(ctx.session.state["task_context"].get("validationFeedback"))
@@ -213,7 +227,12 @@ async def test_invalid_research_quantity_is_repaired_without_repeating_search(mo
     async def collect():
         async for event in agent.SceneAtlasAgent()._run_async_impl(ctx):
             events.append(event)
-    if always_invalid:
+    if extract_status == 401:
+        with pytest.raises(AuthenticationError):
+            await collect()
+        assert model_calls == []
+        assert not any("sceneatlasResult" in (p.text or "") for e in events for p in (e.content.parts if e.content else []))
+    elif always_invalid:
         with pytest.raises(ValueError, match="three attempts"):
             await collect()
         assert len(model_calls) == 3
@@ -223,5 +242,16 @@ async def test_invalid_research_quantity_is_repaired_without_repeating_search(mo
         result = json.loads(events[-1].content.parts[0].text)["sceneatlasResult"]
         assert result["locations"][0]["costs"][0]["quantity"] == 1
         assert result["locations"][0]["costs"][0]["amountMinor"] is None
+        assert result["locations"][0]["sources"][0]["provider"] == "parallel"
+        assert result["locations"][0]["sources"][0]["excerpt"] == "Observed search evidence"
         assert len(model_calls) == 2 and model_calls[1]
     assert len(searches) == 1
+    assert "Los Angeles County" in searches[0]["objective"]
+    assert extractions == [{"urls": [source_url]}]
+    assert task["searchEvidence"] == search_evidence
+    if extract_status == 200:
+        assert task["extractedEvidence"] == extracted_evidence
+    elif extract_status == 429:
+        assert task["extractedEvidence"]["results"] == []
+        assert "using retrieved search excerpts" in task["extractedEvidence"]["errors"][0]
+        assert any(e.actions.state_delta.get("activity") == "Page extraction unavailable · reviewing search excerpts" for e in events)

@@ -160,3 +160,13 @@ async def test_interrupted_breakdown_resumes_saved_batches_and_publishes_only_wh
     assert [s["number"] for s in result["scenes"]] == list(range(1, 19))
     assert any("Resumed saved batch 1 / 3" in e.actions.state_delta.get("activity", "") for e in events)
     validate_draft(result, pages)
+
+
+def test_scene_excerpt_does_not_include_furniture_from_the_next_scene_page():
+    pages = [{"page": 1, "text": "EXT. BEACH - DAY"},
+             {"page": 2, "text": "2.\nEXT. OVERLOOK - DAY"}]
+    scenes = index_scenes(pages)
+    result = assemble_scenes(scenes, [enrichment(batch) for batch in scene_batches(scenes)])
+    assert result["scenes"][0]["pageEnd"] == 1
+    validate_draft(result, pages)
+    assert result["scenes"][0]["excerpt"] == "EXT. BEACH - DAY"

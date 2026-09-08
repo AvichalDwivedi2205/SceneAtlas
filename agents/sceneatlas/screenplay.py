@@ -66,7 +66,10 @@ class SceneSpan:
 
     @property
     def text(self) -> str:
-        return "\n".join(line for _, line in self.lines)
+        # A new page's number/continued marker can arrive before its next slug.
+        # It does not extend the previous scene's source span.
+        return "\n".join(line for page, line in self.lines
+                         if self.page_start <= page <= self.page_end)
 
     def segments(self) -> list[dict]:
         # Split even an unusually long scene. Every character belongs to one part.

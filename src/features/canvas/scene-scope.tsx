@@ -145,7 +145,12 @@ export function SceneNavigator({ onNavigate }: { onNavigate: () => void }) {
         (scene.data.durationMinutes === null || !scene.data.windows.length);
       const stale =
         scene.stale ||
-        snapshot.entities.some((e) => e.scope.sceneId === scene._id && e.stale);
+        snapshot.entities.some(
+          (e) =>
+            e.scope.sceneId === scene._id &&
+            (!e.scope.planId || e.scope.planId === activePlanId) &&
+            e.stale,
+        );
       return { scene, questions, chosen, timing, stale };
     })
     .filter(

@@ -21,6 +21,7 @@ import type * as lib_planScope from "../lib/planScope.js";
 import type * as lib_results from "../lib/results.js";
 import type * as memberActions from "../memberActions.js";
 import type * as members from "../members.js";
+import type * as packets from "../packets.js";
 import type * as planning from "../planning.js";
 import type * as presence from "../presence.js";
 import type * as runs from "../runs.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   "lib/results": typeof lib_results;
   memberActions: typeof memberActions;
   members: typeof members;
+  packets: typeof packets;
   planning: typeof planning;
   presence: typeof presence;
   runs: typeof runs;

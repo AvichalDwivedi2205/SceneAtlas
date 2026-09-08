@@ -50,12 +50,12 @@ test("schedule and packet explain incomplete production state", async ({
   await page.goto("/preview");
   await page.getByRole("button", { name: "Schedule", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Find your way through the shoot." }),
+    page.getByRole("heading", { name: /shooting schedule/ }),
   ).toBeVisible();
   await expect(page.getByText("Scene 2 duration still unknown.")).toBeVisible();
-  await page.getByRole("button", { name: "Preparation packet" }).click();
+  await page.getByRole("button", { name: "Preparation packet", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "A packet you can stand behind." }),
+    page.getByRole("heading", { name: "Production preparation packet" }),
   ).toBeVisible();
   await expect(
     page

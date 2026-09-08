@@ -32,6 +32,7 @@ export function LiveBoard({
     preview = useMutation(api.changes.preview),
     move = useMutation(api.boards.move),
     choose = useMutation(api.planning.select),
+    startPlans = useMutation(api.planning.startReadyPlans),
     note = useMutation(api.boards.addNote);
   const requestUpload = useMutation(api.assets.requestUpload),
     finish = useMutation(api.assets.finishUpload),
@@ -118,6 +119,15 @@ export function LiveBoard({
   const actions: BoardActions = useMemo(
     () => ({
       upload,
+      startPlans: async (planIds: string[]) => {
+        const outcomes = await startPlans({
+          boardId: id,
+          planIds: planIds as Id<"entities">[],
+        });
+        const blocked = outcomes.filter((o) => o.blockers.length);
+        if (blocked.length)
+          throw new Error(blocked.flatMap((o) => o.blockers).join(" "));
+      },
       start: async (
         kind: TaskKind,
         targetId?: string,
@@ -188,6 +198,7 @@ export function LiveBoard({
       preview,
       move,
       choose,
+      startPlans,
       note,
       cancel,
       retry,

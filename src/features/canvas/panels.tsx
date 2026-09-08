@@ -1,12 +1,12 @@
 "use client";
+import { PlanComparison } from "./plan-comparison";
+import { PacketReadiness } from "./packet-readiness";
+import { PlanScenePicker } from "./scene-scope";
 import { useState } from "react";
 import {
   ArrowUpRight,
-  Check,
-  Clock3,
   Download,
   ExternalLink,
-  FileText,
   MapPin,
   LoaderCircle,
   Plus,
@@ -26,25 +26,18 @@ import { formatMoney, formatTime } from "../../domain/planning";
 import { AsyncButton } from "../../components/async-button";
 import { AssetButton } from "../../components/asset-button";
 import { latestRun, RunState, TaskButton } from "./workflow-state";
+import {
+  CandidateComparison,
+  ResearchDetails,
+  SourceEvidence,
+} from "./research-details";
+import { RevisionReview } from "./revision-review";
+import {
+  isStartTimeChange,
+  revisionInputChanges,
+} from "../../domain/revision-review";
 export function SourceList({ sources }: { sources: Source[] }) {
-  return (
-    <div className="source-list">
-      {sources.map((s, i) => (
-        <a key={`${s.url}-${i}`} href={s.url} target="_blank" rel="noreferrer">
-          <div>
-            <span>{s.title}</span>
-            <ExternalLink size={13} />
-          </div>
-          <p>{s.excerpt.slice(0, 230)}</p>
-          <small>
-            {s.provider === "parallel" ? "Parallel" : s.provider}{" "}
-            · {new URL(s.url).hostname} · {s.cached ? "Cached" : "Retrieved"}{" "}
-            {new Date(s.retrievedAt).toLocaleDateString()}
-          </small>
-        </a>
-      ))}
-    </div>
-  );
+  return <SourceEvidence sources={sources} />;
 }
 export function Inspector({ entity }: { entity: Entity }) {
   const { snapshot, previewMode, edit, actions, act } = useBoard();
@@ -76,22 +69,29 @@ export function Inspector({ entity }: { entity: Entity }) {
           <p>{d.creativeFit}</p>
           <p>{d.description}</p>
           <h3>What it costs</h3>
+          {!d.costs.length && (
+            <p>Price evidence is missing. Cost is unknown.</p>
+          )}
           {d.costs.map((c) => (
-            <div className="detail-row" key={c.id}>
-              <div>
-                <strong>{c.label}</strong>
-                <p>{c.coverageReason}</p>
+            <div key={c.id}>
+              <div className="detail-row">
+                <div>
+                  <strong>{c.label}</strong>
+                  <p>{c.coverageReason}</p>
+                </div>
+                <div>
+                  <strong>
+                    {c.amountMinor === null
+                      ? "Not quoted"
+                      : formatMoney(c.amountMinor, c.currency)}
+                  </strong>
+                  <small>
+                    {c.basis} · per {c.unit} × {c.quantity}
+                  </small>
+                </div>
               </div>
-              <div>
-                <strong>
-                  {c.amountMinor === null
-                    ? "Not quoted"
-                    : formatMoney(c.amountMinor, c.currency)}
-                </strong>
-                <small>
-                  {c.basis} · per {c.unit} × {c.quantity}
-                </small>
-              </div>
+              {c.assumptions && <p className="small muted">{c.assumptions}</p>}
+              {c.source && <SourceList sources={[c.source]} />}
             </div>
           ))}
           <p className="small muted">
@@ -121,12 +121,16 @@ export function Inspector({ entity }: { entity: Entity }) {
               </span>
               <h4>{r.title}</h4>
               <p>{r.detail}</p>
+              {r.applicableFacts.length > 0 && (
+                <p>Applies to: {r.applicableFacts.join("; ")}</p>
+              )}
               {r.leadTime && <p>Published lead time: {r.leadTime}</p>}
               <SourceList sources={r.sources} />
             </div>
           ))}
           <h3>Where this came from</h3>
           <SourceList sources={d.sources} />
+          <ResearchDetails entity={entity} />
           <div className="notice">
             Finding a location is not permission to film there.
           </div>
@@ -193,6 +197,8 @@ export function Inspector({ entity }: { entity: Entity }) {
                 </strong>
               </div>
             ))}
+          <CandidateComparison sceneId={entity._id} />
+          <ResearchDetails entity={entity} />
           {!previewMode && snapshot.role !== "viewer" && (
             <button className="button primary" onClick={() => edit(entity)}>
               Edit scene settings
@@ -594,6 +600,10 @@ export function EditForm({
       {draft.kind === "plan" && (
         <>
           {input("Plan name", draft.name, (v) => patch({ name: v }))}
+          <PlanScenePicker
+            plan={draft}
+            onChange={(sceneScope) => patch({ sceneScope })}
+          />
           <label>
             Budget mode
             <select
@@ -731,31 +741,56 @@ export function EditForm({
   );
 }
 export function ChangePanel({ change }: { change: ChangeView }) {
-  const { snapshot, actions, act } = useBoard();
+  const { snapshot, actions, previewMode } = useBoard();
   const target = snapshot.entities.find((e) => e._id === change.targetId);
-  const proposed = change.proposed;
+  const editable = snapshot.role !== "viewer" && !previewMode;
+  const differences = revisionInputChanges(
+    change.before,
+    change.proposed,
+    snapshot.entities,
+  );
+  const startTimeOnly = isStartTimeChange(differences);
+  const runs = change.runIds.flatMap((id) => {
+    const run = snapshot.runs.find((candidate) => candidate._id === id);
+    return run ? [run] : [];
+  });
+  const working = runs.some(
+    (run) => run.status === "running" || run.status === "queued",
+  );
+  const waiting = runs.some((run) => run.status === "waiting");
+  const interrupted = runs.some((run) =>
+    ["failed", "cancelled", "superseded"].includes(run.status),
+  );
+  const scheduleChange =
+    (change.stagedSchedules?.length ?? 0) > 0 ||
+    change.affectedIds.some((id) =>
+      snapshot.entities.some(
+        (entity) => entity._id === id && entity.data.kind === "schedule",
+      ),
+    );
+  const statusLabel =
+    {
+      preview: "Review production inputs",
+      regenerating: working
+        ? "Updating dependent outputs"
+        : waiting
+          ? "Needs production answers"
+          : interrupted
+            ? "Update interrupted"
+            : "Inputs saved · update outputs",
+      ready: scheduleChange
+        ? "Review updated schedule"
+        : "Review updated outputs",
+      applied: "Revision applied",
+      undone: "Revision undone",
+      discarded: "Draft discarded",
+    }[change.status] ?? change.status;
   return (
     <div className="change-content">
-      <span className="eyebrow">CHANGE PREVIEW · {change.status}</span>
-      <h2>{change.summary}</h2>
-      <p>{target ? titleFor(target) : "Scoped production revision"}</p>
-      {proposed?.kind === "question" && (
-        <div className="change-values">
-          <div>
-            <span>Previous answer</span>
-            <p>
-              {change.before?.kind === "question"
-                ? change.before.answer || "Unanswered"
-                : "—"}
-            </p>
-          </div>
-          <ArrowUpRight size={20} />
-          <div>
-            <span>Proposed answer</span>
-            <p>{proposed.answer}</p>
-          </div>
-        </div>
-      )}
+      <span className="eyebrow">PRODUCTION REVISION</span>
+      <h2>{statusLabel}</h2>
+      <p>{target ? titleFor(target) : change.summary}</p>
+      <RevisionReview change={change} snapshot={snapshot} />
       <h3>Affected outputs</h3>
       <div className="affected-list">
         {change.affectedIds.map((id) => {
@@ -771,31 +806,60 @@ export function ChangePanel({ change }: { change: ChangeView }) {
           <p>No generated outputs depend on this input yet.</p>
         )}
       </div>
-      <p className="small muted">
-        Saved answers and manual card positions remain attached to their
-        records. Conflicting collaborator edits require a fresh review.
-      </p>
+      {change.status === "preview" && (
+        <p className="small muted">
+          Save the proposed inputs first, then generate and inspect the updated
+          outputs before applying them.
+        </p>
+      )}
+      {change.status === "regenerating" && !working && !waiting && (
+        <p className="small muted">
+          The inputs are saved. Generate updated outputs to review them before
+          Apply.
+        </p>
+      )}
+      {waiting && (
+        <p className="notice brass-notice">
+          Answer the pending producer questions to continue this revision. The
+          saved input change remains available.
+        </p>
+      )}
+      {change.regenerationError && (
+        <p className="notice clay-notice" role="alert">
+          {change.regenerationError}
+        </p>
+      )}
+      {interrupted && (
+        <p className="notice clay-notice">
+          An update was interrupted. Retry the affected outputs using the saved
+          inputs, or undo this revision.
+        </p>
+      )}
+      {!editable && (
+        <p className="small muted">
+          View only · an owner or editor can apply production revisions.
+        </p>
+      )}
       <div className="actions">
         {change.status === "preview" && (
           <>
             <AsyncButton
               pendingLabel="Discarding…"
               className="button"
-              onClick={() => act(() => actions.change("discard", change._id))}
+              disabled={!editable}
+              onClick={() => actions.change("discard", change._id)}
             >
               Discard
             </AsyncButton>
             <AsyncButton
               pendingLabel="Saving…"
               className="button primary"
-              onClick={() =>
-                act(
-                  () => actions.change("commitInputs", change._id),
-                  "Input saved; affected results marked for refresh",
-                )
-              }
+              disabled={!editable}
+              onClick={() => actions.change("commitInputs", change._id)}
             >
-              Confirm input change
+              {startTimeOnly
+                ? "Save new start time"
+                : "Save production input changes"}
             </AsyncButton>
           </>
         )}
@@ -803,292 +867,53 @@ export function ChangePanel({ change }: { change: ChangeView }) {
           <AsyncButton
             pendingLabel="Starting refresh…"
             className="button primary"
-            onClick={() => act(() => actions.change("regenerate", change._id))}
+            disabled={!editable || working || waiting}
+            onClick={() => actions.change("regenerate", change._id)}
           >
-            <Sparkles size={14} /> Regenerate affected outputs
+            <Sparkles size={14} />{" "}
+            {working
+              ? "Updating outputs…"
+              : waiting
+                ? "Waiting for production answers"
+                : interrupted
+                  ? "Retry updated outputs"
+                  : scheduleChange
+                    ? "Generate updated schedule"
+                    : "Regenerate affected outputs"}
           </AsyncButton>
         )}
         {change.status === "ready" && (
           <AsyncButton
             pendingLabel="Applying changes…"
             className="button primary"
-            onClick={() =>
-              act(
-                () => actions.change("apply", change._id),
-                "Revised results applied",
-              )
-            }
+            disabled={!editable}
+            onClick={() => actions.change("apply", change._id)}
           >
-            Apply revised results
+            {scheduleChange
+              ? "Apply updated schedule"
+              : "Apply updated outputs"}
           </AsyncButton>
         )}
         {["regenerating", "ready", "applied"].includes(change.status) && (
           <AsyncButton
             pendingLabel="Undoing change…"
             className="button"
-            onClick={() =>
-              act(() => actions.change("undo", change._id), "Change undone")
-            }
+            disabled={!editable}
+            onClick={() => actions.change("undo", change._id)}
           >
             Undo change
           </AsyncButton>
         )}
       </div>
-      {change.runIds.map((id) => {
-        const run = snapshot.runs.find((r) => r._id === id);
-        return run ? (
-          <div key={id} className="detail-row">
-            <span>{run.activity}</span>
-            <span className="badge">{run.status}</span>
-          </div>
-        ) : null;
-      })}
+      {runs.map((run) => (
+        <RunState key={run._id} run={run} />
+      ))}
     </div>
   );
 }
 export function SchedulePanel() {
-  const { snapshot, actions, edit, act, previewMode } = useBoard();
-  const plans = snapshot.entities.filter((e) => e.data.kind === "plan");
-  return (
-    <section className="planning-view">
-      <div className="planning-heading">
-        <span className="eyebrow">SAME STORY. DIFFERENT TRADEOFFS.</span>
-        <h1>Find your way through the shoot.</h1>
-        <p>
-          Compare both plans. Keep costs, constraints, and open questions in
-          view.
-        </p>
-      </div>
-      <div className="plan-comparison">
-        {plans.map((p) => {
-          if (p.data.kind !== "plan") return null;
-          const schedule = snapshot.entities.find(
-            (e) => e.data.kind === "schedule" && e.data.planId === p._id,
-          );
-          const d = schedule?.data.kind === "schedule" ? schedule.data : null;
-          const run = latestRun(snapshot.runs, "schedule", p._id);
-          return (
-            <article className="comparison-card glass" key={p._id}>
-              <div className="comparison-title">
-                <span
-                  className={`badge ${p.data.budgetMode === "fixed" ? "brass-badge" : "moss-badge"}`}
-                >
-                  {p.data.budgetMode === "fixed"
-                    ? "Budget capped"
-                    : "No fixed cap"}
-                </span>
-                <button
-                  className="button tiny quiet"
-                  disabled={previewMode || snapshot.role === "viewer"}
-                  onClick={() => edit(p)}
-                >
-                  Settings
-                </button>
-              </div>
-              <h2>{p.data.name}</h2>
-              <p>
-                {p.data.idealShoot ||
-                  "Confirm your priorities and production constraints."}
-              </p>
-              <PlanTotals planId={p._id} />
-              {run &&
-                ["queued", "running", "waiting", "failed"].includes(
-                  run.status,
-                ) && <RunState run={run} />}
-              <div className="comparison-metrics">
-                <div>
-                  <strong>{d?.days ?? "—"}</strong>
-                  <span>shooting days</span>
-                </div>
-                <div>
-                  <strong>{d?.moves ?? "—"}</strong>
-                  <span>location moves</span>
-                </div>
-                <div>
-                  <strong>{d?.conflicts.length ?? "—"}</strong>
-                  <span>timing blockers</span>
-                </div>
-              </div>
-              {schedule?.stale && (
-                <div className="notice clay-notice">
-                  This schedule needs refresh.
-                </div>
-              )}
-              {d?.entries.map((e) => (
-                <div className="schedule-row" key={e.sceneId}>
-                  <span>
-                    {e.date} · {formatTime(e.start)}–{formatTime(e.end)}
-                  </span>
-                  <h3>
-                    Scene {e.sceneNumber} · {e.locationName}
-                  </h3>
-                  <p>{e.reason}</p>
-                  <small>Duration: {e.durationBasis}</small>
-                </div>
-              ))}
-              {d?.conflicts.map((c) => (
-                <div className="notice clay-notice" key={c}>
-                  {c}
-                </div>
-              ))}
-              {!d && (
-                <div className="empty-schedule">
-                  <Clock3 size={27} />
-                  <h3>Build a proposed order.</h3>
-                  <p>
-                    Select locations and confirm scene durations and shooting
-                    windows first.
-                  </p>
-                </div>
-              )}
-              <TaskButton
-                kind={"schedule"}
-                targetId={p._id}
-                className="button primary"
-                disabled={previewMode || snapshot.role === "viewer"}
-                onClick={() =>
-                  act(() => actions.start("schedule", p._id, p.scope))
-                }
-              >
-                <Sparkles size={14} />
-                {d ? "Replan schedule" : "Generate proposed schedule"}
-              </TaskButton>
-              <p className="small muted">
-                Proposed timing. Availability and permissions remain unverified.
-              </p>
-            </article>
-          );
-        })}
-        {!plans.length && (
-          <div className="empty-schedule">
-            <h2>Your plans will appear here.</h2>
-            <p>Generate scene groups to start comparing production choices.</p>
-          </div>
-        )}
-      </div>
-    </section>
-  );
+  return <PlanComparison />;
 }
 export function PacketPanel({ planId }: { planId?: string }) {
-  const { snapshot, actions, act, previewMode } = useBoard();
-  const plan =
-    snapshot.entities.find((e) => e._id === planId && e.data.kind === "plan") ||
-    snapshot.entities.find((e) => e.data.kind === "plan");
-  const packet = snapshot.entities.find(
-    (e) => e.data.kind === "packet" && e.data.planId === plan?._id,
-  );
-  const data = packet?.data.kind === "packet" ? packet.data : null;
-  const run = latestRun(snapshot.runs, "packet", plan?._id);
-  return (
-    <section className="planning-view">
-      <div className="planning-heading">
-        <span className="eyebrow">THE NEXT STEP, WITH NOTHING LEFT OUT</span>
-        <h1>A packet you can stand behind.</h1>
-        <p>
-          {plan ? titleFor(plan) : "Choose a production plan"} · Sources,
-          decisions, and unresolved questions travel together.
-        </p>
-      </div>
-      <div className="packet-grid">
-        <article className="glass packet-main">
-          <div className="packet-document-icon">
-            <FileText size={37} />
-          </div>
-          <h2>Production preparation packet</h2>
-          <p>Everything needed for a clear, informed next conversation.</p>
-          {run &&
-            ["queued", "running", "waiting", "failed"].includes(run.status) && (
-              <RunState run={run} />
-            )}
-          {[
-            "Scene-to-location assignments",
-            "Proposed shooting order",
-            "Costs, estimates, and unquoted items",
-            "Confirmed activities and equipment",
-            "Official requirement sources",
-            "Forms and supporting-document checklist",
-            "Unresolved production questions",
-          ].map((label) => (
-            <div className="checklist-item" key={label}>
-              <Check size={16} className="moss" />
-              <span>{label}</span>
-            </div>
-          ))}
-          {packet?.stale && (
-            <div className="notice clay-notice">
-              Production facts changed after this packet was built. Rebuild
-              before using it as current.
-            </div>
-          )}
-          <div className="actions">
-            <TaskButton
-              kind={"packet"}
-              targetId={plan?._id}
-              className="button primary"
-              disabled={!plan || previewMode || snapshot.role === "viewer"}
-              onClick={() =>
-                act(() => actions.start("packet", plan!._id, plan!.scope))
-              }
-            >
-              <Sparkles size={15} />
-              {data ? "Rebuild packet" : "Prepare packet"}
-            </TaskButton>
-            {data && !previewMode && (
-              <AssetButton
-                assetId={data.assetId}
-                filename={data.filename}
-                className="button"
-              >
-                <Download size={15} />{" "}
-                {packet?.stale ? "Historical PDF" : "Download PDF"}
-              </AssetButton>
-            )}
-            {data?.manifestAssetId && !previewMode && (
-              <AssetButton
-                assetId={data.manifestAssetId}
-                filename="source-manifest.json"
-                className="text-link"
-              >
-                Source manifest <ArrowUpRight size={13} />
-              </AssetButton>
-            )}
-          </div>
-        </article>
-        <aside className="glass packet-sidebar">
-          <ShieldCheck size={23} className="brass" />
-          <h3>Preparation is a separate step.</h3>
-          <div className="detail-row">
-            <span>Document</span>
-            <span className="badge">
-              {data ? "Draft prepared" : "Not prepared"}
-            </span>
-          </div>
-          <div className="detail-row">
-            <span>Application</span>
-            <span className="badge">Not submitted</span>
-          </div>
-          <div className="detail-row">
-            <span>Approval</span>
-            <span className="badge brass-badge">Unverified</span>
-          </div>
-          <p>
-            Filing, payment, signatures, bookings, and approvals happen outside
-            SceneAtlas.
-          </p>
-          <h3>Needs confirmation</h3>
-          {(
-            data?.unresolved ?? [
-              "Location availability",
-              "Missing quotes",
-              "Applicable permit confirmation",
-            ]
-          ).map((u) => (
-            <p className="restriction" key={u}>
-              {u}
-            </p>
-          ))}
-        </aside>
-      </div>
-    </section>
-  );
+  return <PacketReadiness planId={planId} />;
 }

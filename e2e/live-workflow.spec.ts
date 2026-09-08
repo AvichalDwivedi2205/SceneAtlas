@@ -189,7 +189,7 @@ test("live screenplay becomes a sourced plan and downloadable draft packet", asy
       .getByRole("button", { name: "Create and open", exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { name: "Bring your story to the board." }),
+      page.getByRole("heading", { name: "Upload your screenplay" }),
     ).toBeVisible();
     boardId = new URL(page.url()).pathname.split("/").at(-1) as Id<"boards">;
 
@@ -197,12 +197,10 @@ test("live screenplay becomes a sourced plan and downloadable draft packet", asy
     await page
       .getByRole("button", { name: "Preparation packet", exact: true })
       .click();
-    await expect(
-      page.getByRole("button", { name: "Prepare packet", exact: true }),
-    ).toBeDisabled();
+    await expect(page.getByText("Choose a production plan to review packet readiness.")).toBeVisible();
     await page.getByRole("button", { name: "Canvas", exact: true }).click();
     await page
-      .getByRole("button", { name: "Add your screenplay", exact: true })
+      .getByRole("button", { name: "Upload screenplay", exact: true })
       .click();
     await page
       .getByLabel("Screenplay filename")

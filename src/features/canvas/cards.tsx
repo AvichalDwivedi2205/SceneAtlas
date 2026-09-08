@@ -20,6 +20,12 @@ import {
 } from "lucide-react";
 import type { Entity, QuestionData } from "../../domain/model";
 import { formatMoney, summarizeCosts } from "../../domain/planning";
+import {
+  effectivePlanSceneIds,
+  scopedPlan,
+  isCurrentLocationEvidence,
+} from "../../domain/scope";
+import { planCostItems } from "../../domain/plan-readiness";
 import { useBoard } from "./board-context";
 import { AsyncButton } from "../../components/async-button";
 import { latestRun, RunState, TaskButton } from "./workflow-state";
@@ -82,6 +88,12 @@ export const ProductionCard = memo(function ProductionCard({
   } = useBoard();
   const entity = data.entity;
   const d = entity.data;
+  const historicalEvidence =
+    (d.kind === "requirement" || d.kind === "cost") &&
+    !isCurrentLocationEvidence(
+      entity,
+      snapshot.entities.find((e) => e._id === d.locationId),
+    );
   const Icon = icons[d.kind];
   const editable = snapshot.role !== "viewer" && !previewMode;
   const latest = latestRun(snapshot.runs, undefined, entity._id);
@@ -121,6 +133,11 @@ export const ProductionCard = memo(function ProductionCard({
           <ArrowUpRight size={15} />
         </button>
       </header>
+      {historicalEvidence && (
+        <p className="notice">
+          Historical evidence · omitted from current plan inputs
+        </p>
+      )}
       {d.kind === "answer" ? (
         <div className="answer-body">
           <p>{d.question}</p>
@@ -290,7 +307,19 @@ export const ProductionCard = memo(function ProductionCard({
                       pendingLabel="Saving selection…"
                       key={sceneId}
                       className={`button small-button nodrag ${selectedLocation ? "selected-choice" : "quiet"}`}
-                      disabled={!editable || !activePlanId}
+                      disabled={
+                        !editable ||
+                        !activePlanId ||
+                        !snapshot.entities.some(
+                          (p) =>
+                            p._id === activePlanId &&
+                            p.data.kind === "plan" &&
+                            effectivePlanSceneIds(
+                              p.data,
+                              snapshot.entities,
+                            ).includes(sceneId),
+                        )
+                      }
                       onClick={() =>
                         act(
                           () =>
@@ -531,14 +560,9 @@ export function PlanTotals({ planId }: { planId: string }) {
   const { snapshot } = useBoard();
   const p = snapshot.entities.find((e) => e._id === planId);
   if (p?.data.kind !== "plan") return null;
-  const ids = new Set(
-    snapshot.choices
-      .filter((c) => c.planId === planId)
-      .map((c) => c.locationId),
-  );
-  const costs = snapshot.entities
-    .filter((e) => ids.has(e._id))
-    .flatMap((e) => (e.data.kind === "location" ? e.data.costs : []));
+  const selected = scopedPlan(p, snapshot.entities, snapshot.choices);
+  const ids = new Set(selected.locations.map((e) => e._id));
+  const costs = planCostItems(selected.locations, p.data.currency);
   const s = summarizeCosts(
     costs,
     p.data.currency,

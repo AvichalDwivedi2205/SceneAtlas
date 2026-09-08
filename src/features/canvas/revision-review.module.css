@@ -1,0 +1,68 @@
+.comparison {
+  margin: 15px 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.table th,
+.table td {
+  padding: 9px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.table th {
+  font-weight: 600;
+}
+
+.table thead {
+  background: #20261b;
+}
+
+.table th[scope="row"] {
+  min-width: 75px;
+}
+
+.table tr:last-child > * {
+  border-bottom: 0;
+}
+
+.table td p {
+  font-size: 11px;
+  margin: 4px 0;
+}
+
+.preserved {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.preserved > div + div {
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.preserved p {
+  margin: 5px 0;
+  font-size: 12px;
+}
+
+.preserved summary {
+  cursor: pointer;
+  font-size: 12px;
+}

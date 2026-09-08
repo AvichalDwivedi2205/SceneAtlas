@@ -1,4 +1,7 @@
 "use client";
+import { WorkflowGuide } from "./workflow-guide";
+import { SceneNavigator } from "./scene-scope";
+import { effectivePlanSceneIds } from "../../domain/scope";
 import Link from "next/link";
 import {
   useCallback,
@@ -6,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -96,6 +100,14 @@ export function BoardView(props: Props) {
     </ReactFlowProvider>
   );
 }
+function subscribeActivePlan(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener("sceneatlas:active-plan", onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener("sceneatlas:active-plan", onChange);
+  };
+}
 function BoardInterior({
   snapshot,
   actions,
@@ -110,7 +122,19 @@ function BoardInterior({
 }: Props) {
   const flow = useReactFlow<CardNode>();
   const [view, setView] = useState(initialView);
-  const [activePlanId, setPlan] = useState<string>();
+  const planStorageKey = `sceneatlas:active-plan:${snapshot.board._id}:${snapshot.me._id}`;
+  const activePlanId = useSyncExternalStore(
+    subscribeActivePlan,
+    () => window.localStorage.getItem(planStorageKey) ?? undefined,
+    () => undefined,
+  );
+  const setPlan = useCallback(
+    (id: string) => {
+      window.localStorage.setItem(planStorageKey, id);
+      window.dispatchEvent(new Event("sceneatlas:active-plan"));
+    },
+    [planStorageKey],
+  );
   const [nodes, setNodes] = useState<CardNode[]>([]);
   const [selectedIds, setSelected] = useState<string[]>([]);
   const dragging = useRef(new Set<string>());
@@ -119,7 +143,7 @@ function BoardInterior({
     id: string;
   } | null>(null);
   const [modal, setModal] = useState<
-    "share" | "upload" | "note" | "search" | null
+    "share" | "upload" | "note" | "search" | "scenes" | null
   >(null);
   const [panel, setPanel] = useState<"chat" | "changes" | "activity" | null>(
     null,
@@ -130,7 +154,7 @@ function BoardInterior({
   const [busy, setBusy] = useState(0);
   const [query, setQuery] = useState("");
   const [chat, setChat] = useState("");
-  const [chatScope, setChatScope] = useState("workspace");
+  const [chatScope, setChatScope] = useState("active-plan");
   const [noteText, setNoteText] = useState("");
   const [paste, setPaste] = useState("");
   const [scriptName, setScriptName] = useState("screenplay.txt");
@@ -146,7 +170,12 @@ function BoardInterior({
         (a.data.kind === "scene" ? a.data.number : 0) -
         (b.data.kind === "scene" ? b.data.number : 0),
     );
-  const effectivePlanId = activePlanId ?? plans[0]?._id;
+  const effectivePlan = plans.find((p) => p._id === activePlanId) ?? plans[0];
+  const effectivePlanId = effectivePlan?._id;
+  const includedSceneIds =
+    effectivePlan?.data.kind === "plan"
+      ? effectivePlanSceneIds(effectivePlan.data, scenes)
+      : [];
   const act = useCallback(
     async (fn: () => Promise<unknown>, message?: string) => {
       setError("");
@@ -268,6 +297,7 @@ function BoardInterior({
     snapshot,
     actions,
     activePlanId: effectivePlanId,
+    selectPlan: setPlan,
     previewMode,
     focus,
     inspect,
@@ -275,17 +305,21 @@ function BoardInterior({
     act,
   };
   const scope: Scope =
-    chatScope === "workspace"
-      ? { kind: "workspace" }
-      : chatScope.startsWith("scene:")
-        ? { kind: "scene", sceneId: chatScope.slice(6) }
-        : chatScope.startsWith("both:")
-          ? {
-              kind: "plan_scene",
-              planId: effectivePlanId,
-              sceneId: chatScope.slice(5),
-            }
-          : { kind: "plan", planId: chatScope.slice(5) };
+    chatScope === "active-plan"
+      ? effectivePlanId
+        ? { kind: "plan", planId: effectivePlanId }
+        : { kind: "workspace" }
+      : chatScope === "workspace"
+        ? { kind: "workspace" }
+        : chatScope.startsWith("scene:")
+          ? { kind: "scene", sceneId: chatScope.slice(6) }
+          : chatScope.startsWith("both:")
+            ? {
+                kind: "plan_scene",
+                planId: effectivePlanId,
+                sceneId: chatScope.slice(5),
+              }
+            : { kind: "plan", planId: chatScope.slice(5) };
   const visibleMessages = messages.filter(
     (m) =>
       m.scope.kind === scope.kind &&
@@ -398,7 +432,7 @@ function BoardInterior({
                 ? "Example board · sample content"
                 : snapshot.role === "viewer"
                   ? "Shared with you · View only"
-                  : "Private production workspace"}
+                  : `${effectivePlan?.data.kind === "plan" ? effectivePlan.data.name : "No plan yet"} / ${includedSceneIds.length} of ${scenes.length} scenes`}
             </span>
           </div>
           <div className="topbar-right">
@@ -442,6 +476,19 @@ function BoardInterior({
             </button>
           </div>
         </header>
+        <WorkflowGuide
+          onStage={(stage) => {
+            if (stage === "screenplay") {
+              const script = snapshot.entities.find(
+                (e) => e.data.kind === "script",
+              );
+              if (script) focus(script._id);
+              else setModal("upload");
+            } else if (stage === "scenes" || stage === "locations")
+              setModal("scenes");
+            else setView(stage);
+          }}
+        />
         <div className="board-subbar">
           <div className="view-tabs">
             {(
@@ -502,7 +549,12 @@ function BoardInterior({
         )}
         {!previewMode && (
           <BoardProgress
-            runs={snapshot.runs}
+            runs={snapshot.runs.filter(
+              (r) =>
+                (!r.scope.planId || r.scope.planId === effectivePlanId) &&
+                (!r.scope.sceneId ||
+                  includedSceneIds.includes(r.scope.sceneId)),
+            )}
             uploadProgress={uploadProgress}
             onActivity={() => setPanel("activity")}
           />
@@ -529,8 +581,7 @@ function BoardInterior({
               title="Scene navigator"
               aria-label="Scene navigator"
               onClick={() => {
-                setQuery("scene");
-                setModal("search");
+                setModal("scenes");
               }}
             >
               <ListFilter size={19} />
@@ -737,7 +788,7 @@ function BoardInterior({
                     </span>
                   </div>
                   <span className="eyebrow">A NEW PRODUCTION STARTS HERE</span>
-                  <h1>Bring your story to the board.</h1>
+                  <h1>Upload your screenplay</h1>
                   <p>
                     Upload a screenplay. Answer the production questions.
                     <br />
@@ -754,7 +805,7 @@ function BoardInterior({
                       }
                       onClick={() => setModal("upload")}
                     >
-                      <Upload size={15} /> Add your screenplay
+                      <Upload size={15} /> Upload screenplay
                     </button>
                   )}
                   <span className="small muted">
@@ -846,6 +897,11 @@ function BoardInterior({
                       value={chatScope}
                       onChange={(e) => setChatScope(e.target.value)}
                     >
+                      <option value="active-plan">
+                        {effectivePlan?.data.kind === "plan"
+                          ? `${effectivePlan.data.name} · included scenes`
+                          : "Workspace inputs"}
+                      </option>
                       <option value="workspace">Whole workspace</option>
                       {plans.map((p) => (
                         <option key={p._id} value={`plan:${p._id}`}>
@@ -858,11 +914,16 @@ function BoardInterior({
                         </option>
                       ))}
                       {effectivePlanId &&
-                        scenes.map((s) => (
-                          <option key={`both-${s._id}`} value={`both:${s._id}`}>
-                            Active plan + {titleFor(s)}
-                          </option>
-                        ))}
+                        scenes
+                          .filter((s) => includedSceneIds.includes(s._id))
+                          .map((s) => (
+                            <option
+                              key={`both-${s._id}`}
+                              value={`both:${s._id}`}
+                            >
+                              Active plan + {titleFor(s)}
+                            </option>
+                          ))}
                     </select>
                   </label>
                   <div className="chat-messages">
@@ -1241,6 +1302,9 @@ function BoardInterior({
                   </button>
                 </form>
               )}
+              {modal === "scenes" && (
+                <SceneNavigator onNavigate={() => setModal(null)} />
+              )}
               {modal === "search" && (
                 <>
                   <div className="search-field">
@@ -1261,7 +1325,6 @@ function BoardInterior({
                           .toLowerCase()
                           .includes(query.toLowerCase()),
                       )
-                      .slice(0, 50)
                       .map((e) => (
                         <button
                           key={e._id}

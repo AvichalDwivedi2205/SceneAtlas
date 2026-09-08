@@ -6,11 +6,13 @@ import { AsyncButton } from "./async-button";
 export function AssetButton({
   assetId,
   filename,
+  mode = "download",
   className = "button",
   children,
 }: {
   assetId: string;
   filename: string;
+  mode?: "download" | "open";
   className?: string;
   children: ReactNode;
 }) {
@@ -21,13 +23,24 @@ export function AssetButton({
     },
     [],
   );
+  if (mode === "open")
+    return (
+      <a
+        className={className}
+        href={`/api/assets/${encodeURIComponent(assetId)}?disposition=inline`}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {children}
+      </a>
+    );
   return (
     <AsyncButton
       className={className}
       pendingLabel="Preparing download…"
       onClick={async () => {
         const response = await fetch(
-          `/api/assets/${encodeURIComponent(assetId)}`,
+          `/api/assets/${encodeURIComponent(assetId)}?disposition=attachment`,
         );
         if (!response.ok)
           throw new Error(

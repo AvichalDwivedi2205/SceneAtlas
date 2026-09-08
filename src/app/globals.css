@@ -2494,3 +2494,30 @@ button[aria-busy="true"] {
   font-size: 12px;
   text-align: center;
 }
+
+/* Persistent producer context and plan-scoped actions. */
+.workflow-guide { display:flex; flex-shrink:0; gap:6px; padding:10px 20px; border-bottom:1px solid var(--line); background:#181f16; }
+.workflow-stage { flex:1; display:flex; align-items:center; gap:9px; padding:8px 12px; text-align:left; border:1px solid transparent; border-radius:8px; color:var(--muted); background:transparent; cursor:pointer; }
+.workflow-stage.current { border-color:#78613a; background:#302a1d; color:#ead29e; }
+.workflow-stage strong { display:block; font-size:12px; }
+.workflow-stage small { display:block; font-size:10px; color:var(--muted); }
+.workflow-step { display:grid; place-items:center; width:23px; height:23px; border:1px solid var(--line); border-radius:50%; flex-shrink:0; }
+.scene-picker { margin:12px 0; padding:12px; border:1px solid var(--line); border-radius:8px; }
+.scene-picker legend { padding:0 6px; font-weight:600; }
+.scene-picker-list { max-height:260px; overflow:auto; margin-top:12px; }
+.scene-picker-list label { display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
+.scene-picker-list input[type=checkbox] { width:16px; min-height:16px; height:16px; flex-shrink:0; margin-top:3px; }
+.scene-picker-list small { display:block; color:var(--muted); }
+.scene-navigator h2 { font-size:24px; margin:0; }
+.scene-navigator .form-grid { margin-top:16px; }
+.scene-navigator-list { max-height:55vh; overflow:auto; }
+.scene-navigator-list article { padding:14px 0; border-top:1px solid var(--line); }
+.scene-navigator-list p { color:var(--muted); font-size:12px; margin:4px 0 8px; }
+.scene-heading { border:0; background:none; color:var(--paper); cursor:pointer; text-align:left; font:600 14px var(--body); padding:0; }
+.planning-heading h1 { font-size:30px; line-height:1.2; margin:7px 0; }
+.planning-heading { margin-bottom:22px; }
+.comparison-card.chosen-plan { border-color:#ae8c52; box-shadow:0 0 0 1px #ae8c5240; }
+.comparison-card details { margin:12px 0; }
+.comparison-card details summary { cursor:pointer; color:#dbc69b; }
+.comparison-card details ul { padding-left:20px; font-size:12px; color:var(--muted); }
+@media(max-width:760px) { .workflow-guide { padding:6px; gap:1px; overflow:auto; } .workflow-stage { padding:7px; min-width:105px; gap:5px; } .workflow-step { display:none; } .workflow-stage strong { font-size:11px; } }

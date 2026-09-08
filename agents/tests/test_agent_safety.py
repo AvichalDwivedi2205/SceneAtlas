@@ -168,7 +168,7 @@ async def test_complete_calculated_schedule_does_not_reask_confirmed_inputs(monk
 def test_research_requires_real_production_area_on_legacy_boards():
     from sceneatlas.agent import missing_intake
     assert missing_intake({"entities": []}, "research")[0]["data"]["key"] == "search_area"
-    assert missing_intake({"entities": [{"kind": "question", "data": {"key": "search_area", "resolution": "answered", "answer": "Los Angeles County"}}]}, "research") == []
+    assert [q["data"]["key"] for q in missing_intake({"entities": [{"kind": "question", "data": {"key": "search_area", "resolution": "answered", "answer": "Los Angeles County"}}]}, "research")] == ["fee_estimate_policy"]
 
 
 @pytest.mark.asyncio
@@ -188,6 +188,7 @@ async def test_invalid_research_quantity_is_repaired_without_repeating_retrieval
     task = {"run": {"_id": "run", "kind": "research", "targetId": "scene"}, "entities": [
         {"_id": "scene", "kind": "scene", "data": {"kind": "scene", "setting": "Beach", "needs": ["Open sand"], "candidateCount": 1}},
         {"kind": "question", "data": {"key": "search_area", "answer": "Los Angeles County", "resolution": "answered"}},
+        {"kind": "question", "data": {"key": "fee_estimate_policy", "answer": "Keep unquoted fees unknown", "resolution": "answered"}},
     ]}
     model_calls, searches, extractions = [], [], []
     source_url = "https://film.ca.gov/state-permits/"

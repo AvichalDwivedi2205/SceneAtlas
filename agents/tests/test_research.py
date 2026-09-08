@@ -155,10 +155,47 @@ def test_modeled_fee_is_an_estimate_even_when_its_rate_has_a_source(assumptions)
     url = "https://film.ca.gov/state-permits/state-parks-beaches/"
     evidence = {"results": [{"url": url, "title": "Parking guidance", "excerpt": "Parking rates vary by location."}], "searchId": "search_fee", "retrievedAt": 200}
     location = {"sources": [{"url": url}], "costs": [{"basis": "published", "amountMinor": 1500, "assumptions": assumptions, "source": {"url": url}}], "requirements": []}
-    cost = research.normalize_sources({"locations": [location]}, evidence)["locations"][0]["costs"][0]
+    cost = research.normalize_sources({"locations": [location]}, evidence, allow_fee_estimates=True)["locations"][0]["costs"][0]
     assert cost["basis"] == "estimate"
     assert cost["amountMinor"] == 1500
     assert cost["source"]["searchId"] == "search_fee"
+
+
+@pytest.mark.parametrize("basis,assumptions", [
+    ("estimate", "Assumes a simple shoot classification."),
+    ("published", "Assumes one hour of crew parking."),
+])
+def test_unapproved_fee_estimates_remain_unquoted(basis, assumptions):
+    url = "https://film.ca.gov/state-permits/"
+    evidence = {"results": [{"url": url, "title": "Official rates", "excerpt": "Rates depend on category and quantity."}], "retrievedAt": 1, "searchId": "fee"}
+    result = {"locations": [{"sources": [], "requirements": [], "costs": [{
+        "basis": basis, "amountMinor": 10000, "assumptions": assumptions, "source": {"url": url}}]}]}
+    cost = research.normalize_sources(result, evidence)["locations"][0]["costs"][0]
+    assert cost["basis"] == "unknown"
+    assert cost["amountMinor"] is None
+
+
+def test_only_explicit_answered_fee_policy_allows_estimates():
+    assert not research.fee_estimates_allowed([])
+    assert not research.fee_estimates_allowed([{"key": "production_activities", "resolution": "answered", "answer": "Use estimated shooting durations."}])
+    policy = {"key": "fee_estimate_policy", "resolution": "open", "answer": research.FEE_ESTIMATES_ALLOW}
+    assert not research.fee_estimates_allowed([policy])
+    policy["resolution"] = "answered"
+    assert research.fee_estimates_allowed([policy])
+    policy["answer"] = research.FEE_ESTIMATES_UNKNOWN
+    assert not research.fee_estimates_allowed([policy])
+
+
+def test_missing_fees_policy_has_explicit_choices_and_preserves_known_rates():
+    from sceneatlas.agent import required_intake
+    policy = next(q["data"] for q in required_intake() if q["data"]["key"] == "fee_estimate_policy")
+    assert policy["suggestions"] == [research.FEE_ESTIMATES_UNKNOWN, research.FEE_ESTIMATES_ALLOW]
+    url = "https://film.ca.gov/state-permits/"
+    evidence = {"results": [{"url": url, "title": "Official fee", "excerpt": "Flat fee."}], "retrievedAt": 1, "searchId": "fee"}
+    result = {"locations": [{"sources": [], "requirements": [], "costs": [{"basis": "published", "amountMinor": 10000, "source": {"url": url}}]}]}
+    cost = research.normalize_sources(result, evidence)["locations"][0]["costs"][0]
+    assert cost["basis"] == "published"
+    assert cost["amountMinor"] == 10000
 
 
 def test_another_parks_official_form_does_not_establish_this_parks_rules():

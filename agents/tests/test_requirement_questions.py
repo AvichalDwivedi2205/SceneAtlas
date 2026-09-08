@@ -44,6 +44,7 @@ async def test_authority_question_is_repaired_before_publication(monkeypatch, ke
     task = {"run": {"_id": "run", "kind": "requirements", "targetId": "location"}, "entities": [
         {"_id": "location", "kind": "location", "data": location},
         {"kind": "question", "data": {"key": "production_activities", "resolution": "answered", "answer": "Four people, handheld camera, no effects."}},
+        {"kind": "question", "data": {"key": "fee_estimate_policy", "resolution": "answered", "answer": "Keep unquoted fees unknown"}},
     ]}
     retrievals, model_calls = [], []
 

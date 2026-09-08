@@ -1900,15 +1900,20 @@ button:disabled {
 }
 .schedule-row span,
 .schedule-row small {
-  font-size: 9px;
+  font-size: 12px;
   color: var(--muted);
 }
+.schedule-row span {
+  font-size: 14px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
 .schedule-row h3 {
-  font-size: 13px;
+  font-size: 16px;
   margin: 3px 0;
 }
 .schedule-row p {
-  font-size: 10px;
+  font-size: 12px;
   color: #afb7a7;
   margin: 2px 0;
 }

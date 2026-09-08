@@ -2505,7 +2505,7 @@ button[aria-busy="true"] {
 .scene-picker { margin:12px 0; padding:12px; border:1px solid var(--line); border-radius:8px; }
 .scene-picker legend { padding:0 6px; font-weight:600; }
 .scene-picker-list { max-height:260px; overflow:auto; margin-top:12px; }
-.scene-picker-list label { display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
+.scene-picker-list label { display:flex; flex-direction:row; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
 .scene-picker-list input[type=checkbox] { width:16px; min-height:16px; height:16px; flex-shrink:0; margin-top:3px; }
 .scene-picker-list small { display:block; color:var(--muted); }
 .scene-navigator h2 { font-size:24px; margin:0; }

@@ -9,43 +9,34 @@ import {
   entitySchema,
 } from "../../src/domain/model";
 import { validateScope } from "./entities";
+import { planReadiness } from "../../src/domain/plan-readiness";
+import { scopeEntities } from "../../src/domain/scope";
 export function relevantEntities(
   entities: Doc<"entities">[],
   scope: Scope,
   targetId?: string,
+  choices: Doc<"choices">[] = [],
+  kind?: TaskKind,
 ) {
-  return entities.filter(
-    (e) =>
-      scope.kind === "workspace" ||
-      e.scope.kind === "workspace" ||
-      e._id === targetId ||
-      (!!scope.sceneId &&
-        (e.scope.sceneId === scope.sceneId ||
-          (e.kind === "location" &&
-            e.data.sceneIds.includes(scope.sceneId)))) ||
-      (!!scope.planId &&
-        (e.scope.planId === scope.planId ||
-          e.kind === "scene" ||
-          e.kind === "location" ||
-          e.kind === "cost" ||
-          e.kind === "requirement" ||
-          e.scope.kind === "scene")),
-  );
+  return scopeEntities(entities, scope, targetId, choices, kind);
 }
-export function blockingQuestions(
-  entities: Doc<"entities">[],
-  kind: TaskKind,
-  scope: Scope,
-) {
+export function blockingQuestions(entities: Doc<"entities">[], kind: TaskKind) {
   return entities.filter(
     (e) =>
       e.kind === "question" &&
       e.data.resolution !== "answered" &&
-      e.data.blocks.includes(kind) &&
-      (e.scope.kind === "workspace" ||
-        Boolean(scope.sceneId && e.scope.sceneId === scope.sceneId) ||
-        Boolean(scope.planId && e.scope.planId === scope.planId)),
+      e.data.blocks.includes(kind),
   );
+}
+export function inputFingerprint(entities: Doc<"entities">[], kind: TaskKind) {
+  return entities
+    .filter(
+      (e) =>
+        !["note", "answer", "packet"].includes(e.kind) &&
+        (kind === "packet" || e.kind !== "schedule"),
+    )
+    .map((e) => ({ id: e._id, revision: e.revision }))
+    .sort((a, b) => a.id.localeCompare(b.id));
 }
 export async function enqueue(
   ctx: MutationCtx,
@@ -73,7 +64,22 @@ export async function enqueue(
     .query("entities")
     .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
     .collect();
-  const relevant = relevantEntities(all, args.scope, args.targetId);
+  const choices = await ctx.db
+    .query("choices")
+    .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+    .collect();
+  const relevant = relevantEntities(
+    all,
+    args.scope,
+    args.targetId,
+    choices,
+    args.kind,
+  );
+  if (
+    ["schedule", "packet"].includes(args.kind) &&
+    (args.scope.kind !== "plan" || args.scope.planId !== args.targetId)
+  )
+    throw new ConvexError("Choose this plan as the task scope.");
   const target = args.targetId
     ? relevant.find((e) => e._id === args.targetId)
     : undefined;
@@ -88,7 +94,7 @@ export async function enqueue(
   };
   if (expectedKind[args.kind] && target?.kind !== expectedKind[args.kind])
     throw new ConvexError("Choose the correct card for this task.");
-  const blocking = blockingQuestions(relevant, args.kind, args.scope);
+  const blocking = blockingQuestions(relevant, args.kind);
   if (blocking.length)
     throw new ConvexError(
       `Answer first: ${blocking
@@ -116,10 +122,16 @@ export async function enqueue(
     throw new ConvexError(
       "Refresh affected results before building a current packet.",
     );
-  const inputVersions = relevant
-    .filter((e) => !["note", "answer", "packet", "schedule"].includes(e.kind))
-    .map((e) => ({ id: e._id, revision: e.revision }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+  if ((args.kind === "schedule" || args.kind === "packet") && target) {
+    const ready = planReadiness(target, all, choices);
+    const blockers = [...ready.blockers];
+    if (args.kind === "packet" && !ready.currentSchedule)
+      blockers.push(
+        "Generate and apply a current schedule for the included scenes.",
+      );
+    if (blockers.length) throw new ConvexError(blockers.join(" "));
+  }
+  const inputVersions = inputFingerprint(relevant, args.kind);
   const workKey = JSON.stringify([
     args.boardId,
     args.kind,
@@ -198,9 +210,18 @@ export async function enqueue(
   return runId;
 }
 export async function inputsCurrent(ctx: MutationCtx, run: Doc<"runs">) {
-  for (const input of run.inputVersions) {
-    const e = await ctx.db.get(input.id);
-    if (!e || e.revision !== input.revision) return false;
-  }
-  return true;
+  const all = await ctx.db
+    .query("entities")
+    .withIndex("by_board", (q) => q.eq("boardId", run.boardId))
+    .collect();
+  const choices = await ctx.db
+    .query("choices")
+    .withIndex("by_board", (q) => q.eq("boardId", run.boardId))
+    .collect();
+  const kind = taskKindSchema.parse(run.kind);
+  const current = inputFingerprint(
+    relevantEntities(all, run.scope, run.targetId, choices, kind),
+    kind,
+  );
+  return JSON.stringify(current) === JSON.stringify(run.inputVersions);
 }

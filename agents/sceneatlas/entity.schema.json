@@ -759,6 +759,29 @@
           "minLength": 1,
           "maxLength": 80
         },
+        "sceneScope": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "all",
+                "selected"
+              ]
+            },
+            "sceneIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "mode",
+            "sceneIds"
+          ],
+          "additionalProperties": false
+        },
         "budgetMode": {
           "type": "string",
           "enum": [
@@ -1294,6 +1317,25 @@
           "type": "number"
         },
         "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sourceVersion": {
+          "type": "string"
+        },
+        "sourcePlanRevision": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "sourceScheduleRevision": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "includedSceneIds": {
           "type": "array",
           "items": {
             "type": "string"

@@ -7,7 +7,7 @@ import {
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { requireMember } from "./lib/auth";
-import { scope } from "./schema";
+import { scope, researchEvent } from "./schema";
 import { enqueue, inputsCurrent, relevantEntities } from "./lib/jobs";
 import {
   taskKindSchema,
@@ -15,6 +15,7 @@ import {
   type PlanData,
   type SceneData,
 } from "../src/domain/model";
+import { effectivePlanSceneIds } from "../src/domain/scope";
 import { proposeSchedule } from "../src/domain/planning";
 import { publishResult, resultSchema } from "./lib/results";
 export const start = mutation({
@@ -203,14 +204,37 @@ export const context = internalQuery({
       .query("entities")
       .withIndex("by_board", (q) => q.eq("boardId", run.boardId))
       .collect();
-    const entities = relevantEntities(all, run.scope, run.targetId);
-    const choices = await ctx.db
+    const savedChoices = await ctx.db
       .query("choices")
       .withIndex("by_board", (q) => q.eq("boardId", run.boardId))
       .collect();
+    const entities = relevantEntities(
+      all,
+      run.scope,
+      run.targetId,
+      savedChoices,
+      taskKindSchema.parse(run.kind),
+    );
+    const plan = all.find(
+      (e) => e._id === run.scope.planId && e.kind === "plan",
+    );
+    const sceneIds = new Set(
+      plan
+        ? effectivePlanSceneIds(plan.data, all)
+        : entities.filter((e) => e.kind === "scene").map((e) => e._id),
+    );
+    const choices = savedChoices.filter(
+      (c) =>
+        (!run.scope.planId || c.planId === run.scope.planId) &&
+        sceneIds.has(c.sceneId),
+    );
     const script = entities.find((e) => e.kind === "script");
     const assetId =
-      run.kind === "ingest" ? run.request?.assetId : script?.data.assetId;
+      run.kind === "ingest"
+        ? run.request?.assetId
+        : run.kind === "scenes"
+          ? script?.data.assetId
+          : undefined;
     const normalizedAssetId = assetId
       ? ctx.db.normalizeId("assets", String(assetId))
       : null;
@@ -265,6 +289,7 @@ export const event = internalMutation({
     status: v.optional(v.string()),
     detail: v.optional(v.string()),
     providerId: v.optional(v.string()),
+    research: v.optional(researchEvent),
     result: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
@@ -306,6 +331,7 @@ export const event = internalMutation({
       activity: args.activity.slice(0, 200),
       detail: args.detail?.slice(0, 4000),
       providerId: args.providerId,
+      research: args.research,
       createdAt: Date.now(),
     });
     await ctx.db.patch(run._id, {

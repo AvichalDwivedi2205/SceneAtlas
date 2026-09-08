@@ -1,9 +1,68 @@
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v, ConvexError } from "convex/values";
 import { requireMember, boardEntity, assertRevision } from "./lib/auth";
-import { connect, updateEntity } from "./lib/entities";
+import { updateEntity } from "./lib/entities";
 import { affectedIds, summarizeCosts } from "../src/domain/planning";
 import { entitySchema } from "../src/domain/model";
+import { effectivePlanSceneIds, scopedPlan } from "../src/domain/scope";
+import { syncPlanDependencies } from "./lib/planScope";
+import { enqueue } from "./lib/jobs";
+import { planReadiness, planCostItems } from "../src/domain/plan-readiness";
+
+export const startReadyPlans = mutation({
+  args: { boardId: v.id("boards"), planIds: v.array(v.id("entities")) },
+  handler: async (ctx, args) => {
+    const { user } = await requireMember(ctx, args.boardId, "editor");
+    if (args.planIds.length !== 2 || new Set(args.planIds).size !== 2)
+      throw new ConvexError("Choose two distinct plans to generate together.");
+    const plans = await Promise.all(
+      args.planIds.map((id) => boardEntity(ctx, args.boardId, id)),
+    );
+    if (plans.some((p) => p.kind !== "plan"))
+      throw new ConvexError("Choose plan records.");
+    const all = await ctx.db
+      .query("entities")
+      .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+      .collect();
+    const choices = await ctx.db
+      .query("choices")
+      .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+      .collect();
+    const outcomes: {
+      planId: Id<"entities">;
+      runId?: Id<"runs">;
+      blockers: string[];
+    }[] = [];
+    for (const plan of plans) {
+      const ready = planReadiness(plan, all, choices);
+      if (ready.blockers.length) {
+        outcomes.push({ planId: plan._id, blockers: ready.blockers });
+        continue;
+      }
+      try {
+        const runId = await enqueue(ctx, {
+          boardId: args.boardId,
+          userId: user._id,
+          kind: "schedule",
+          targetId: plan._id,
+          scope: { kind: "plan", planId: plan._id },
+        });
+        outcomes.push({ planId: plan._id, runId, blockers: [] });
+      } catch (error) {
+        outcomes.push({
+          planId: plan._id,
+          blockers: [
+            error instanceof Error
+              ? error.message
+              : "Could not queue this plan. Retry it independently.",
+          ],
+        });
+      }
+    }
+    return outcomes;
+  },
+});
 export const select = mutation({
   args: {
     boardId: v.id("boards"),
@@ -26,6 +85,10 @@ export const select = mutation({
       !location.data.sceneIds.includes(scene._id)
     )
       throw new ConvexError("Choose a candidate belonging to this scene.");
+    if (!effectivePlanSceneIds(plan.data, [scene]).includes(scene._id))
+      throw new ConvexError(
+        "Include this scene in the plan before selecting or locking a location.",
+      );
     const old = await ctx.db
       .query("choices")
       .withIndex("by_plan_scene", (q) =>
@@ -45,37 +108,8 @@ export const select = mutation({
     };
     if (old) await ctx.db.patch(old._id, values);
     else await ctx.db.insert("choices", values);
-    if (old && old.locationId !== args.locationId) {
-      const planChoices = await ctx.db
-        .query("choices")
-        .withIndex("by_plan_scene", (q) => q.eq("planId", args.planId))
-        .collect();
-      if (!planChoices.some((choice) => choice.locationId === old.locationId)) {
-        const oldEdges = await ctx.db
-          .query("edges")
-          .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
-          .collect();
-        for (const edge of oldEdges)
-          if (
-            edge.sourceId === old.locationId &&
-            edge.targetId === args.planId &&
-            edge.relation === "selected"
-          )
-            await ctx.db.delete(edge._id);
-        const oldDependencies = await ctx.db
-          .query("dependencies")
-          .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
-          .collect();
-        for (const dependency of oldDependencies)
-          if (
-            dependency.sourceId === old.locationId &&
-            dependency.targetId === args.planId
-          )
-            await ctx.db.delete(dependency._id);
-      }
-    }
     await updateEntity(ctx, plan, entitySchema.parse(plan.data), user._id);
-    await connect(ctx, args.boardId, args.locationId, args.planId, "selected");
+    await syncPlanDependencies(ctx, (await ctx.db.get(plan._id))!);
     const deps = await ctx.db
       .query("dependencies")
       .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
@@ -106,13 +140,21 @@ export const summary = query({
       .query("choices")
       .withIndex("by_plan_scene", (q) => q.eq("planId", args.planId))
       .collect();
+    const all = await ctx.db
+      .query("entities")
+      .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+      .collect();
+    const active = scopedPlan(p, all, choices);
     const locations = await Promise.all(
-      [...new Set(choices.map((c) => c.locationId))].map((id) =>
+      [...new Set(active.choices.map((c) => c.locationId))].map((id) =>
         ctx.db.get(id),
       ),
     );
     return summarizeCosts(
-      locations.flatMap((l) => l?.data.costs ?? []),
+      planCostItems(
+        locations.filter((l) => l !== null),
+        p.data.currency,
+      ),
       p.data.currency,
       p.data.budgetMode === "fixed" ? p.data.budgetMinor : null,
     );

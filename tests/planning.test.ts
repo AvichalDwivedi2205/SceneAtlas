@@ -179,3 +179,99 @@ describe("schedule constraints", () => {
     expect(s.conflicts.join()).toContain("hard limit is 0");
   });
 });
+
+it("omits historical requirement children from active plan inputs", async () => {
+  const { scopedPlan } = await import("../src/domain/scope");
+  const record = (_id: string, data: unknown) => ({
+    _id,
+    data: entitySchema.parse(data),
+    scope: { kind: "workspace" as const },
+  });
+  const scene = record("scene", {
+    kind: "scene",
+    number: 1,
+    heading: "EXT. COAST - DAY",
+    excerpt: "The tide recedes.",
+    pageStart: 1,
+    pageEnd: 1,
+    setting: "Coast",
+    interiorExterior: "EXT",
+    timeOfDay: "DAY",
+    needs: [],
+  });
+  const plan = record("plan", {
+    kind: "plan",
+    name: "Day 1",
+    budgetMode: "uncapped",
+    budgetMinor: null,
+    priority: "creative",
+    sceneScope: { mode: "selected", sceneIds: ["scene"] },
+  });
+  const requirement = {
+    title: "Former notice",
+    detail: "Superseded guidance",
+    authority: "Authority",
+    status: "unresolved",
+    sources: [],
+    attachments: [],
+    applicableFacts: [],
+  };
+  const location = record("location", {
+    kind: "location",
+    name: "Coast",
+    address: "Coast",
+    description: "Source-supported location",
+    creativeFit: "Open coast",
+    restrictions: [],
+    authority: "Authority",
+    sources: [
+      {
+        url: "https://example.com/coast",
+        title: "Coast",
+        excerpt: "Public coast",
+        retrievedAt: 1,
+        provider: "parallel",
+      },
+    ],
+    costs: [],
+    requirements: [],
+    sceneIds: ["scene"],
+  });
+  const obsolete = record("old-requirement", {
+    ...requirement,
+    kind: "requirement",
+    locationId: "location",
+  });
+  expect(
+    scopedPlan(
+      plan,
+      [scene, plan, location, obsolete],
+      [
+        {
+          planId: "plan",
+          sceneId: "scene",
+          locationId: "location",
+          locked: true,
+        },
+      ],
+    ).entities.map((e) => e._id),
+  ).not.toContain("old-requirement");
+  const currentLocation = record("location", {
+    ...location.data,
+    requirements: [requirement],
+  });
+  expect(
+    scopedPlan(
+      plan,
+      [scene, plan, currentLocation, obsolete],
+      [
+        {
+          planId: "plan",
+          sceneId: "scene",
+          locationId: "location",
+          locked: true,
+        },
+      ],
+    ).entities.map((e) => e._id),
+  ).toContain("old-requirement");
+});

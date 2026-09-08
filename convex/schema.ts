@@ -24,6 +24,23 @@ export const runStatus = v.union(
   v.literal("cancelled"),
   v.literal("superseded"),
 );
+export const researchEvent = v.object({
+  kind: v.literal("research"),
+  operation: v.union(v.literal("search"), v.literal("extract")),
+  phase: v.union(
+    v.literal("request"),
+    v.literal("complete"),
+    v.literal("failed"),
+  ),
+  objective: v.optional(v.string()),
+  queries: v.optional(v.array(v.string())),
+  urls: v.optional(v.array(v.string())),
+  retrievedAt: v.optional(v.number()),
+  cached: v.optional(v.boolean()),
+  requestId: v.optional(v.string()),
+  resultCount: v.optional(v.number()),
+  error: v.optional(v.string()),
+});
 export default defineSchema({
   sceneBatches: defineTable({
     boardId: v.id("boards"),
@@ -164,6 +181,7 @@ export default defineSchema({
     createdAt: v.number(),
     detail: v.optional(v.string()),
     providerId: v.optional(v.string()),
+    research: v.optional(researchEvent),
   }).index("by_run", ["runId"]),
   outbox: defineTable({
     runId: v.id("runs"),
@@ -197,6 +215,42 @@ export default defineSchema({
     createdAt: v.number(),
     summary: v.string(),
     runIds: v.array(v.id("runs")),
+    pendingJobs: v.optional(
+      v.array(
+        v.object({
+          kind: v.union(
+            v.literal("research"),
+            v.literal("requirements"),
+            v.literal("schedule"),
+          ),
+          targetId: v.id("entities"),
+          scope,
+          userId: v.id("users"),
+        }),
+      ),
+    ),
+    regenerationError: v.optional(v.string()),
+    regenerationContinuationAt: v.optional(v.number()),
+    preservedDecisions: v.optional(
+      v.object({
+        choices: v.array(
+          v.object({
+            planId: v.string(),
+            sceneId: v.string(),
+            locationId: v.string(),
+            locked: v.boolean(),
+            revision: v.number(),
+          }),
+        ),
+        answers: v.array(
+          v.object({
+            id: v.string(),
+            revision: v.number(),
+            answer: v.union(v.string(), v.null()),
+          }),
+        ),
+      }),
+    ),
     appliedVersions: v.optional(
       v.array(
         v.object({

@@ -88,7 +88,27 @@ const locationSchema = z.object({ kind: z.literal("location"), name: z.string(),
   rejected: z.boolean().default(false),
 });
 export const choiceSchema = z.object({ sceneId: z.string(), locationId: z.string(), locked: z.boolean() });
+export const planSceneScopeSchema = z
+  .object({
+    mode: z.enum(["all", "selected"]),
+    sceneIds: z
+      .array(z.string())
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Choose each scene only once",
+      ),
+  })
+  .superRefine((scope, ctx) => {
+    if (scope.mode === "all" && scope.sceneIds.length)
+      ctx.addIssue({
+        code: "custom",
+        message: "All-scenes mode must not contain a hidden selection",
+        path: ["sceneIds"],
+      });
+  });
 const planSchema = z.object({ kind: z.literal("plan"), name: z.string().min(1).max(80),
+  // Absent on legacy records: all screenplay scenes. Selected [] remains empty.
+  sceneScope: planSceneScopeSchema.optional(),
   budgetMode: z.enum(["fixed", "uncapped"]), budgetMinor: z.number().int().positive().nullable(), currency: z.string().length(3).default("USD"),
   priority: z.enum(["cost", "moves", "days", "creative"]), idealShoot: z.string().default(""),
   rules: z.array(ruleSchema).default([]), dates: z.array(z.string()).default([]), timezone: z.string().default("America/Los_Angeles"),
@@ -111,6 +131,8 @@ const requirementDataSchema = requirementSchema.safeExtend({ kind: z.literal("re
 const costDataSchema = z.object({ kind: z.literal("cost"), locationId: z.string(), items: z.array(costSchema) });
 const packetSchema = z.object({ kind: z.literal("packet"), planId: z.string(), assetId: z.string(),
   filename: z.string(), manifestAssetId: z.string().optional(), builtAt: z.number(), unresolved: z.array(z.string()),
+  sourceVersion: z.string().optional(), sourcePlanRevision: z.number().int().optional(),
+  sourceScheduleRevision: z.number().int().optional(), includedSceneIds: z.array(z.string()).optional(),
   documentStatus: z.literal("draft"), externalStatus: z.literal("not_submitted") });
 const noteSchema = z.object({ kind: z.literal("note"), text: z.string().max(10000) });
 export const entitySchema = z.discriminatedUnion("kind", [scriptSchema, sceneSchema, questionSchema, answerSchema,

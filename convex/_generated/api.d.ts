@@ -17,6 +17,7 @@ import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_entities from "../lib/entities.js";
 import type * as lib_jobs from "../lib/jobs.js";
+import type * as lib_planScope from "../lib/planScope.js";
 import type * as lib_results from "../lib/results.js";
 import type * as memberActions from "../memberActions.js";
 import type * as members from "../members.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/entities": typeof lib_entities;
   "lib/jobs": typeof lib_jobs;
+  "lib/planScope": typeof lib_planScope;
   "lib/results": typeof lib_results;
   memberActions: typeof memberActions;
   members: typeof members;

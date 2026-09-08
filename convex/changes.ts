@@ -1,21 +1,59 @@
-import { mutation, query, internalMutation } from "./_generated/server";
+import {
+  mutation,
+  query,
+  internalMutation,
+  type MutationCtx,
+} from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Id, Doc } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { requireMember, boardEntity, assertRevision } from "./lib/auth";
 import { connect, putEntity, updateEntity } from "./lib/entities";
-import { affectedIds } from "../src/domain/planning";
 import { entitySchema, taskKindSchema } from "../src/domain/model";
-import { enqueue, relevantEntities, blockingQuestions } from "./lib/jobs";
+import {
+  enqueue,
+  relevantEntities,
+  blockingQuestions,
+  inputsCurrent,
+} from "./lib/jobs";
 import { publishResult, resultSchema } from "./lib/results";
+import { effectivePlanSceneIds, scopedPlan } from "../src/domain/scope";
+import {
+  validatePlanScenes,
+  syncPlanDependencies,
+  revisionImpact,
+  sceneInputKind,
+} from "./lib/planScope";
 export const list = query({
   args: { boardId: v.id("boards") },
   handler: async (ctx, { boardId }) => {
     await requireMember(ctx, boardId);
-    return await ctx.db
+    const changes = await ctx.db
       .query("changes")
       .withIndex("by_board", (q) => q.eq("boardId", boardId))
       .order("desc")
       .take(30);
+    return await Promise.all(
+      changes.map(async (change) => {
+        const runs = await Promise.all(
+          change.runIds.map((id) => ctx.db.get(id)),
+        );
+        const stagedSchedules = runs.flatMap((run) => {
+          if (run?.status !== "complete" || run.kind !== "schedule") return [];
+          const parsed = resultSchema.safeParse(run.output);
+          return parsed.success && parsed.data.schedule?.kind === "schedule"
+            ? [parsed.data.schedule]
+            : [];
+        });
+        return {
+          ...change,
+          stagedSchedules,
+          beforeSchedules: (change.appliedVersions ?? []).flatMap((v) =>
+            v.before.kind === "schedule" ? [v.before] : [],
+          ),
+        };
+      }),
+    );
   },
 });
 export const history = query({
@@ -51,6 +89,7 @@ export const preview = mutation({
       throw new ConvexError(
         "Edit source inputs rather than generated evidence.",
       );
+    if (data.kind === "plan") await validatePlanScenes(ctx, args.boardId, data);
     if (data.kind === "question") {
       const old = entitySchema.parse(target.data);
       if (
@@ -69,17 +108,56 @@ export const preview = mutation({
       .query("dependencies")
       .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
       .collect();
-    const affected = affectedIds(target._id, deps)
-      .map((id) => ctx.db.normalizeId("entities", id))
-      .filter((id): id is Id<"entities"> => id !== null);
+    const all = await ctx.db
+      .query("entities")
+      .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+      .collect();
+    const affected = revisionImpact(target, data, all, deps).affected.map(
+      (entity) => entity._id,
+    );
     const records = await Promise.all(
       [target._id, ...affected].map((id) => ctx.db.get(id)),
     );
+    const choices = await ctx.db
+      .query("choices")
+      .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+      .collect();
+    const plan =
+      target.kind === "plan"
+        ? target
+        : all.find((e) => e._id === target.scope.planId);
+    const saved = plan
+      ? scopedPlan(plan, all, choices)
+      : { entities: all, choices };
+    const preservedDecisions = {
+      choices: saved.choices.map(
+        ({ planId, sceneId, locationId, locked, revision }) => ({
+          planId,
+          sceneId,
+          locationId,
+          locked,
+          revision,
+        }),
+      ),
+      answers: saved.entities
+        .filter(
+          (e) =>
+            e.kind === "question" &&
+            e.data.resolution === "answered" &&
+            e._id !== target._id,
+        )
+        .map((e) => ({
+          id: e._id,
+          revision: e.revision,
+          answer: e.data.answer as string | null,
+        })),
+    };
     return await ctx.db.insert("changes", {
       boardId: args.boardId,
       targetId: target._id,
       baseRevision: target.revision,
       before: target.data,
+      preservedDecisions,
       proposed: data,
       affectedIds: affected,
       readVersions: records
@@ -110,13 +188,28 @@ export const commitInputs = mutation({
       .query("dependencies")
       .withIndex("by_board", (q) => q.eq("boardId", change.boardId))
       .collect();
-    const ids = affectedIds(target._id, dependencies)
-      .map((id) => ctx.db.normalizeId("entities", id))
-      .filter((id): id is Id<"entities"> => id !== null);
+    const boardBefore = await ctx.db
+      .query("entities")
+      .withIndex("by_board", (q) => q.eq("boardId", change.boardId))
+      .collect();
+    const data = entitySchema.parse(change.proposed);
+    const impact = revisionImpact(target, data, boardBefore, dependencies);
+    const localInput = sceneInputKind(target, data, boardBefore);
+    const questionOwnerId =
+      target.scope.kind === "plan_scene"
+        ? boardBefore.find(
+            (entity) =>
+              entity._id === target.scope.planId &&
+              entity.kind === "plan" &&
+              effectivePlanSceneIds(entity.data, boardBefore).includes(
+                target.scope.sceneId!,
+              ),
+          )?._id
+        : target.ownerId;
+    const ids = impact.affected.map((entity) => entity._id);
     const before = await Promise.all(
       [target._id, ...ids].map((id) => ctx.db.get(id)),
     );
-    const data = entitySchema.parse(change.proposed);
     const answerBefore =
       data.kind === "question"
         ? await ctx.db
@@ -128,23 +221,43 @@ export const commitInputs = mutation({
             )
             .unique()
         : null;
-    const boardBefore = await ctx.db
-      .query("entities")
-      .withIndex("by_board", (q) => q.eq("boardId", change.boardId))
-      .collect();
     const boardBeforeIds = new Set(boardBefore.map((entity) => entity._id));
     const reversibleBefore = [
       ...before.filter((entity) => entity !== null),
+      ...(target.kind === "question" &&
+      questionOwnerId &&
+      !before.some((e) => e?._id === questionOwnerId)
+        ? boardBefore.filter((e) => e._id === questionOwnerId)
+        : []),
       ...(answerBefore &&
       !before.some((entity) => entity?._id === answerBefore._id)
         ? [answerBefore]
         : []),
     ];
-    await updateEntity(ctx, target, data, user._id, changeId);
+    if (data.kind === "plan")
+      await validatePlanScenes(ctx, change.boardId, data);
+    await updateEntity(
+      ctx,
+      target,
+      data,
+      user._id,
+      changeId,
+      (["scene", "plan"].includes(target.kind) && target.stale) ||
+        impact.researchSceneId === target._id ||
+        (target.kind === "question" &&
+          target.scope.kind === "plan_scene" &&
+          (target.stale || (!!localInput && !localInput.timingOnly))),
+    );
+    if (data.kind === "plan")
+      await syncPlanDependencies(ctx, (await ctx.db.get(target._id))!);
     for (const id of ids) {
       const e = await ctx.db.get(id);
       if (
         e &&
+        !(
+          impact.preserveResearch &&
+          ["location", "cost", "requirement"].includes(e.kind)
+        ) &&
         !["question", "answer", "note", "script", "scene", "plan"].includes(
           e.kind,
         )
@@ -159,7 +272,9 @@ export const commitInputs = mutation({
         );
     }
     if (data.kind === "question" && target.ownerId) {
-      const owner = await ctx.db.get(target.ownerId);
+      const owner = boardBefore.find(
+        (entity) => entity._id === questionOwnerId,
+      );
       if (owner)
         await updateEntity(
           ctx,
@@ -167,7 +282,9 @@ export const commitInputs = mutation({
           entitySchema.parse(owner.data),
           user._id,
           changeId,
-          owner.stale,
+          owner.stale ||
+            impact.researchSceneId === owner._id ||
+            impact.researchPlanId === owner._id,
         );
       const questionNode = await ctx.db
         .query("nodes")
@@ -205,24 +322,45 @@ export const commitInputs = mutation({
       readVersions: after
         .filter((e) => e !== null)
         .map((e) => ({ id: e._id, revision: e.revision })),
-      appliedVersions: reversibleBefore.map((entity) => ({
-        id: entity._id,
-        revision: after.find((current) => current?._id === entity._id)!
-          .revision,
-        before: entity.data,
-        stale: entity.stale,
-      })),
+      appliedVersions: reversibleBefore
+        .filter((entity) =>
+          after.some(
+            (current) =>
+              current?._id === entity._id &&
+              current.revision !== entity.revision,
+          ),
+        )
+        .map((entity) => ({
+          id: entity._id,
+          revision: after.find((current) => current?._id === entity._id)!
+            .revision,
+          before: entity.data,
+          stale: entity.stale,
+        })),
       createdVersions: boardAfter
         .filter((entity) => !boardBeforeIds.has(entity._id))
         .map((entity) => ({ id: entity._id, revision: entity.revision })),
     });
+    // Ensure freshly answered/created shared facts have direct plan dependencies.
+    for (const plan of boardAfter.filter((e) => e.kind === "plan"))
+      await syncPlanDependencies(ctx, plan);
+    const savedChoices = await ctx.db
+      .query("choices")
+      .withIndex("by_board", (q) => q.eq("boardId", change.boardId))
+      .collect();
     const waiting = await ctx.db
       .query("runs")
       .withIndex("by_board", (q) => q.eq("boardId", change.boardId))
       .collect();
     for (const run of waiting) {
       const kind = taskKindSchema.parse(run.kind);
-      const inputs = relevantEntities(boardAfter, run.scope, run.targetId);
+      const inputs = relevantEntities(
+        boardAfter,
+        run.scope,
+        run.targetId,
+        savedChoices,
+        kind,
+      );
       const relatedCheckpoint =
         run.status === "waiting" &&
         target.kind === "question" &&
@@ -248,10 +386,7 @@ export const commitInputs = mutation({
           });
         }
       }
-      if (
-        relatedCheckpoint &&
-        blockingQuestions(inputs, kind, run.scope).length === 0
-      ) {
+      if (relatedCheckpoint && blockingQuestions(inputs, kind).length === 0) {
         try {
           const next = await enqueue(ctx, {
             boardId: run.boardId,
@@ -274,6 +409,8 @@ export const commitInputs = mutation({
       }
     }
     if (
+      !impact.researchSceneId &&
+      !impact.researchPlanId &&
       !ids.some((id) =>
         before.find(
           (e) =>
@@ -286,66 +423,229 @@ export const commitInputs = mutation({
     return null;
   },
 });
+type RevisionJob = NonNullable<Doc<"changes">["pendingJobs"]>[number];
+
+function revisionJobs(
+  change: Doc<"changes">,
+  all: Doc<"entities">[],
+  userId: Id<"users">,
+): RevisionJob[] {
+  const target = all.find((entity) => entity._id === change.targetId);
+  if (!target) return [];
+  const affected = all.filter((entity) =>
+    change.affectedIds.includes(entity._id),
+  );
+  const original = change.before ? { ...target, data: change.before } : target;
+  const local = sceneInputKind(
+    original,
+    entitySchema.parse(change.proposed ?? target.data),
+    all,
+  );
+  if (local && !local.timingOnly)
+    return [
+      {
+        kind: "research",
+        targetId: local.sceneId,
+        scope: local.planId
+          ? { kind: "plan_scene", sceneId: local.sceneId, planId: local.planId }
+          : { kind: "scene", sceneId: local.sceneId },
+        userId,
+      },
+    ];
+  const locationOwner =
+    target.kind === "question"
+      ? all.find(
+          (entity) =>
+            entity._id === target.ownerId && entity.kind === "location",
+        )
+      : undefined;
+  if (locationOwner)
+    return [
+      {
+        kind: "requirements",
+        targetId: locationOwner._id,
+        scope: locationOwner.scope,
+        userId,
+      },
+    ];
+  if (
+    !local &&
+    target.scope.kind === "workspace" &&
+    affected.some((entity) =>
+      ["scene", "location", "requirement"].includes(entity.kind),
+    )
+  ) {
+    const plans = all.filter(
+      (entity) =>
+        entity.kind === "plan" &&
+        (change.affectedIds.includes(entity._id) ||
+          affected.some(
+            (output) =>
+              ["schedule", "packet"].includes(output.kind) &&
+              output.data.planId === entity._id,
+          )),
+    );
+    const sceneIds = new Set(
+      plans.flatMap((plan) => effectivePlanSceneIds(plan.data, all)),
+    );
+    return all
+      .filter((entity) => entity.kind === "scene" && sceneIds.has(entity._id))
+      .map((scene) => ({
+        kind: "research",
+        targetId: scene._id,
+        scope: scene.scope,
+        userId,
+      }));
+  }
+  return affected
+    .filter((entity) => entity.kind === "schedule")
+    .map((schedule) => ({
+      kind: "schedule",
+      targetId: schedule.data.planId as Id<"entities">,
+      scope: schedule.scope,
+      userId,
+    }));
+}
+
+/** Saved pending work only drains while slots are available; failed work remains retryable. */
+async function drainRegeneration(
+  ctx: MutationCtx,
+  changeId: Id<"changes">,
+): Promise<Id<"runs">[]> {
+  const change = await ctx.db.get(changeId);
+  if (!change || change.status !== "regenerating") return [];
+  const boardRuns = await ctx.db
+    .query("runs")
+    .withIndex("by_board", (q) => q.eq("boardId", change.boardId))
+    .order("desc")
+    .take(100);
+  const active = boardRuns.filter((run) =>
+    ["queued", "running"].includes(run.status),
+  );
+  let available = Math.max(0, 8 - active.length);
+  const pending: RevisionJob[] = [];
+  const errors: string[] = [];
+  let capacityLimited = false;
+  for (const job of change.pendingJobs ?? []) {
+    if (!available) {
+      pending.push(job);
+      capacityLimited = true;
+      continue;
+    }
+    const member = await ctx.db
+      .query("members")
+      .withIndex("by_board_user", (q) =>
+        q.eq("boardId", change.boardId).eq("userId", job.userId),
+      )
+      .unique();
+    if (!member || member.role === "viewer") {
+      pending.push(job);
+      errors.push(
+        "The editor who queued this revision no longer has editing access. An editor can retry it.",
+      );
+      continue;
+    }
+    try {
+      await enqueue(ctx, { ...job, boardId: change.boardId, changeId });
+      available--;
+    } catch (error) {
+      pending.push(job);
+      errors.push(
+        error instanceof Error
+          ? error.message
+          : "An update could not be queued. Retry the retained work.",
+      );
+    }
+  }
+  const saved = (await ctx.db.get(changeId))!;
+  const runs = await Promise.all(saved.runIds.map((id) => ctx.db.get(id)));
+  const failed = runs.filter(
+    (run) => !run || ["failed", "cancelled", "superseded"].includes(run.status),
+  );
+  if (failed.length)
+    errors.push(
+      `${failed.length} update task${failed.length === 1 ? "" : "s"} interrupted. Retry retains the other staged results.`,
+    );
+  const complete =
+    !pending.length &&
+    (saved.pendingJobs !== undefined || runs.length > 0) &&
+    runs.every((run) => run?.status === "complete");
+  const continuationAt =
+    capacityLimited && !saved.regenerationContinuationAt
+      ? Date.now() + 15000
+      : saved.regenerationContinuationAt;
+  await ctx.db.patch(changeId, {
+    pendingJobs: pending,
+    regenerationError:
+      [...new Set(errors)].join(" ").slice(0, 4000) || undefined,
+    status: complete ? "ready" : "regenerating",
+    regenerationContinuationAt:
+      complete || !capacityLimited ? undefined : continuationAt,
+  });
+  // Complete/waiting callbacks also call advance. This fallback covers slots held by unrelated jobs.
+  // Once all running work stops or remaining jobs need user input, no further wakeup is scheduled.
+  if (
+    capacityLimited &&
+    !saved.regenerationContinuationAt &&
+    (active.length > 0 || available < 8)
+  )
+    await ctx.scheduler.runAfter(15000, internal.changes.advance, {
+      changeId,
+      continuationAt,
+    });
+  return saved.runIds;
+}
+
 export const regenerate = mutation({
   args: { changeId: v.id("changes") },
-  handler: async (ctx, { changeId }) => {
+  handler: async (ctx, { changeId }): Promise<Id<"runs">[]> => {
     const change = await ctx.db.get(changeId);
     if (!change || change.status !== "regenerating")
       throw new ConvexError("Confirm this change first.");
     const { user } = await requireMember(ctx, change.boardId, "editor");
-    const target = change.targetId ? await ctx.db.get(change.targetId) : null;
-    const affected = await Promise.all(
-      change.affectedIds.map((id) => ctx.db.get(id)),
+    const all = await ctx.db
+      .query("entities")
+      .withIndex("by_board", (q) => q.eq("boardId", change.boardId))
+      .collect();
+    const jobs = revisionJobs(change, all, user._id);
+    const previous = await Promise.all(
+      change.runIds.map((id) => ctx.db.get(id)),
     );
-    const sceneIds = new Set<Id<"entities">>();
-    if (target?.scope.sceneId && affected.some((e) => e?.kind === "location"))
-      sceneIds.add(target.scope.sceneId as Id<"entities">);
-    for (const e of affected) if (e?.kind === "scene") sceneIds.add(e._id);
-    if (target?.scope.kind === "workspace")
-      for (const e of affected)
-        if (e?.kind === "location")
-          for (const sid of e.data.sceneIds) sceneIds.add(sid);
-    const runIds: Id<"runs">[] = [];
-    for (const sceneId of sceneIds)
-      runIds.push(
-        await enqueue(ctx, {
-          boardId: change.boardId,
-          userId: user._id,
-          kind: "research",
-          scope: { kind: "scene", sceneId },
-          targetId: sceneId,
-          changeId,
-        }),
+    const pending: RevisionJob[] = [];
+    for (const job of jobs) {
+      const matching = previous.find(
+        (run) =>
+          run?.kind === job.kind &&
+          run.targetId === job.targetId &&
+          JSON.stringify(run.scope) === JSON.stringify(job.scope),
       );
-    if (!runIds.length) {
-      for (const e of affected)
-        if (e?.kind === "schedule")
-          runIds.push(
-            await enqueue(ctx, {
-              boardId: change.boardId,
-              userId: user._id,
-              kind: "schedule",
-              scope: e.scope,
-              targetId: e.data.planId,
-              changeId,
-            }),
-          );
+      if (
+        matching &&
+        ["queued", "running", "waiting", "complete"].includes(
+          matching.status,
+        ) &&
+        (await inputsCurrent(ctx, matching))
+      )
+        continue;
+      pending.push(job);
     }
     await ctx.db.patch(changeId, {
-      runIds,
-      status: runIds.length ? "regenerating" : "ready",
+      pendingJobs: pending,
+      regenerationError: undefined,
     });
-    return runIds;
+    return await drainRegeneration(ctx, changeId);
   },
 });
 export const advance = internalMutation({
-  args: { changeId: v.id("changes") },
-  handler: async (ctx, { changeId }) => {
-    const c = await ctx.db.get(changeId);
-    if (!c || c.status !== "regenerating" || !c.runIds.length) return null;
-    const runs = await Promise.all(c.runIds.map((id) => ctx.db.get(id)));
-    if (runs.every((r) => r?.status === "complete"))
-      await ctx.db.patch(changeId, { status: "ready" });
+  args: { changeId: v.id("changes"), continuationAt: v.optional(v.number()) },
+  handler: async (ctx, { changeId, continuationAt }): Promise<null> => {
+    const change = await ctx.db.get(changeId);
+    if (!change || change.status !== "regenerating") return null;
+    if (continuationAt !== undefined) {
+      if (change.regenerationContinuationAt !== continuationAt) return null;
+      await ctx.db.patch(changeId, { regenerationContinuationAt: undefined });
+    }
+    await drainRegeneration(ctx, changeId);
     return null;
   },
 });
@@ -372,17 +672,28 @@ export const apply = mutation({
       .withIndex("by_board", (q) => q.eq("boardId", c.boardId))
       .collect();
     const beforeAssetIds = new Set(beforeAssets.map((asset) => asset._id));
+    const validated: {
+      run: Doc<"runs">;
+      result: ReturnType<typeof resultSchema.parse>;
+    }[] = [];
     for (const id of c.runIds) {
       const run = await ctx.db.get(id);
       if (!run || run.status !== "complete")
         throw new ConvexError("A dependent task is not complete.");
+      if (!(await inputsCurrent(ctx, run)))
+        throw new ConvexError(
+          "Inputs changed while this revision was generated. Review and regenerate again.",
+        );
       const result = resultSchema.parse(run.output);
       if (result.lockConflicts.length)
         throw new ConvexError(
           `Review locked choices before applying: ${result.lockConflicts.join(", ")}`,
         );
-      await publishResult(ctx, run, result);
+      validated.push({ run, result });
     }
+    // Validate the full batch before any publication changes shared evidence revisions.
+    for (const { run, result } of validated)
+      await publishResult(ctx, run, result);
     const previous = c.appliedVersions ?? [];
     const changed = [];
     for (const old of before) {
@@ -516,6 +827,12 @@ export const undo = mutation({
       for (const version of versions) await ctx.db.delete(version._id);
       await ctx.db.delete(created.id);
     }
+    const restoredPlans = await ctx.db
+      .query("entities")
+      .withIndex("by_board", (q) => q.eq("boardId", c.boardId))
+      .collect();
+    for (const plan of restoredPlans.filter((e) => e.kind === "plan"))
+      await syncPlanDependencies(ctx, plan);
     for (const artifact of c.createdAssets ?? []) {
       const asset = await ctx.db.get(artifact.assetId);
       if (asset?.boardId === c.boardId) {
@@ -531,7 +848,12 @@ export const undo = mutation({
           activity: "Revision undone",
         });
     }
-    await ctx.db.patch(changeId, { status: "undone" });
+    await ctx.db.patch(changeId, {
+      status: "undone",
+      pendingJobs: [],
+      regenerationError: undefined,
+      regenerationContinuationAt: undefined,
+    });
     return null;
   },
 });

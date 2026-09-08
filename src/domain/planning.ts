@@ -97,6 +97,6 @@ export function collectFacts(entities: Entity[], sceneId?: string, planId?: stri
   return relevant.sort((a,b)=>Number(a.scope.kind!=="workspace")-Number(b.scope.kind!=="workspace"));
 }
 export function formatMoney(minor: number, currency="USD") {
-  return new Intl.NumberFormat("en-US",{style:"currency",currency,maximumFractionDigits:0}).format(minor/100);
+  return new Intl.NumberFormat("en-US",{style:"currency",currency}).format(minor/100);
 }
 export function formatTime(minutes:number) { return `${String(Math.floor(minutes/60)).padStart(2,"0")}:${String(minutes%60).padStart(2,"0")}`; }

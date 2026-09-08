@@ -59,8 +59,8 @@ No external booking, filing, payments or communications. Prepared documents are 
 STAGES = {
  "ingest": "Read page-numbered screenplay. Return script summary with filename/pageCount/assetId provided, sceneCount as observed. Ask for any material ambiguity that prevents scene breakdown (blocks=['scenes']). Also ask permitted search area (blocks=['research']), crew size and real equipment/activities (blocks=['requirements']). Do not generate scenes yet. If no breakdown ambiguity, ask one scene_scope confirmation with suggestions ['Entire screenplay','Selected scenes']; blocks=['scenes']. Never infer real production choices.",
  "scenes": "Generate complete editable scenes from supplied page text and confirmed scene_scope. Preserve exact excerpts and correct source page spans. Scene durations remain null with unknown basis. Defaults: candidateCount=3, ranking='creative', windows=[]. Ask local material location questions only when needed, with blocks=['research']. Every scene must reference actual script text. No research in this stage.",
- "research": "Use retrieved evidence to return at most target scene's candidateCount real suitable locations. Each location includes name,address,description,creativeFit,restrictions,authority,sources,costs,requirements,sceneIds,rejected=false,availability='unverified'. Hard constraints precede fit ranking. Return fewer candidates rather than pad results. If evidence cannot establish a material hard constraint, disclose that or ask a question. Monetary amounts use minor currency units. Each cost needs id,label,amountMinor,currency,unit,quantity,basis,coverageKey,coverageReason,assumptions. Missing fees are unknown/null. Estimates only when user explicitly permitted estimates. Shared coverage needs evidence. Official sourced requirements must use observed film.ca.gov or parks.ca.gov sources. Other jurisdictions are unsupported; show unresolved items. Every requirement has title,detail,authority,status,sources,attachments,applicableFacts,externalStatus='unverified'. If existing locked location is incompatible, populate lockConflicts with scene ID and explain. Do not unlock anything.",
- "requirements": "Refresh supplied selected location's official requirements for confirmed crew, equipment and activities. Return its location entity with updated requirements/costs and preserved sceneIds/name. Supported official pilot uses observed film.ca.gov and parks.ca.gov evidence. Anything unverified stays unresolved or unsupported. Ask missing material activity questions with blocks=['requirements'].",
+ "research": "Use retrieved evidence to return at most target scene's candidateCount real suitable locations. Each location includes name,address,description,creativeFit,restrictions,authority,sources,costs,requirements,sceneIds,rejected=false,availability='unverified'. Hard constraints precede fit ranking. Return fewer candidates rather than pad results. If evidence cannot establish a material hard constraint, disclose the gap and omit unsuitable candidates. Ask only whether the producer wants to change their constraint; never ask them to supply an unverified public fact. Monetary amounts use minor currency units. Each cost needs id,label,amountMinor,currency,unit,quantity,basis,coverageKey,coverageReason,assumptions. Missing fees are unknown/null. Estimates only when user explicitly permitted estimates. Shared coverage needs evidence. Official sourced requirements must use observed film.ca.gov or parks.ca.gov sources. Other jurisdictions are unsupported; show unresolved items. Every requirement has title,detail,authority,status,sources,attachments,applicableFacts,externalStatus='unverified'. If existing locked location is incompatible, populate lockConflicts with scene ID and explain. Do not unlock anything.",
+ "requirements": "Refresh supplied selected location's official requirements for confirmed crew, equipment and activities. Return its location entity with updated requirements/costs and preserved sceneIds/name. Supported official pilot uses observed film.ca.gov and parks.ca.gov evidence. Anything unverified stays unresolved or unsupported. Ask only missing producer-owned production facts or decisions with blocks=['requirements'], such as intended crew, equipment, filming activities or an explicitly permitted cost estimate. A park's fee amount, permit category, simple/complex classification, site-visit rule, notice period, availability or approval is an external authority fact, not a missing production activity. Never ask the producer to determine those facts from incomplete sources. Keep missing fees unknown/null and authority facts in unresolved requirements with externalStatus='unverified'. Do not borrow another district's rate or assume a classification. A preparation draft can complete with these explicit external follow-ups; it does not authorize filming.",
  "schedule": "Explain the supplied deterministic proposed schedule and conflicts. Do not invent or change schedule rows. Missing inputs need focused questions owned by target plan, with blocks=['schedule']. Explain feasible alternatives for conflicts without relaxing hard constraints or locked location choices. Return explanation as message.",
  "chat": "Answer within active scope using supplied records and evidence. For any requested changes return proposals {targetId,data,summary}, retaining all unedited fields. Ask about ambiguous cross-branch scope or unsupported rules. Do not promise unsupported constraints will be enforced. You may propose scene durations/windows, scene needs/candidateCount/ranking, question answers or plan settings already represented in the schema. Never update data silently.",
  "interpret": "Interpret the producer's request into a small proposed change using only schema-supported controls. Return proposals with full updated entity data. If ambiguous, conflicting or unsupported, ask a focused question and explain which decision needs it. Keep original user text intact.",
@@ -137,6 +137,37 @@ def validate_new_questions(result: dict, entities: list[dict]):
         key = question["data"].get("key")
         if (question.get("ownerId"), key) in answered:
             raise ValueError(f"Question {key} is already answered for this owner. Reuse the recorded answer and return the current result; do not ask the same question again.")
+
+def validate_requirements_questions(result: dict):
+    """Repair the observed authority-fact questions without answering them.
+
+    Keep this guard narrow: producer budgets, estimates and existing quotes are
+    real decisions/inputs. Missing authority rates and classifications belong in
+    the draft's unresolved requirements, not a new blocking producer question.
+    """
+    for question in result.get("questions", []):
+        data = question["data"]
+        prompt = data.get("prompt", "").lower()
+        key = data.get("key", "").replace("_", " ").lower()
+        producer_input = re.search(r"\b(budget|estimate|contingency|willing|prefer|choose|accept|allocate|paid|quoted|quote)\b", prompt)
+        public_fee = (
+            re.search(r"\b(fee|fees|rate|rates|charge|charges)\b", prompt)
+            and re.search(r"\b(permit|review|reservation|district|park|location|filming|commercial)\b", prompt + " " + key)
+            and re.search(r"\b(what|how much|confirm|verify|determine|provide|specify)\b", prompt)
+            and not producer_input
+        )
+        classification = (
+            re.search(r"\bsimple\b", prompt) and re.search(r"\bcomplex\b", prompt)
+            and re.search(r"\b(considered|classified|classification|category|activity level)\b", prompt + " " + key)
+        )
+        if public_fee or classification:
+            raise ValueError(
+                f"Question {data.get('key')} asks the producer to determine an external authority fact. "
+                "Regenerate the complete location result: leave unverified fees unknown/null and "
+                "record the authority fact as an unresolved requirement with externalStatus='unverified'. "
+                "Do not invent a rate, classification or approval. Only missing producer-owned "
+                "activities or decisions may remain in questions."
+            )
 
 class SceneAtlasAgent(BaseAgent):
     def __init__(self):
@@ -286,6 +317,8 @@ class SceneAtlasAgent(BaseAgent):
                 question["ownerId"]=task["run"].get("targetId")
                 question.pop("sceneNumber",None)
             validate_new_questions(result, task["entities"])
+            if kind == "requirements":
+                validate_requirements_questions(result)
             if kind in {"research","requirements"}:
                 target=next(e for e in task["entities"] if e["_id"]==task["run"]["targetId"])
                 result=normalize_sources(result,evidence,target["data"] if kind=="requirements" else None)

@@ -1,0 +1,28 @@
+# Build input excludes local state and production artifacts.
+.git/
+node_modules/
+.next/
+out/
+.env*
+!.env.example
+.vercel/
+.playwright-mcp/
+playwright-report/
+test-results/
+coverage/
+agents/.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.tsbuildinfo
+.DS_Store
+.vercel
+
+# Local-only demo video production files
+/artifacts/demo-video/
+/scripts/record-demo.*
+/scripts/edit-demo.*
+/docs/DEMO_*.md
+/demo requirement.md
+
+/artifacts/

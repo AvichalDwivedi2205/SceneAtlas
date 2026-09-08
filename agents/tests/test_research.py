@@ -1,9 +1,17 @@
+import asyncio
 import json
 import httpx
 import pytest
 from parallel import AsyncParallel, APIConnectionError, APIStatusError, AuthenticationError, BadRequestError, PermissionDeniedError
 
 from sceneatlas import research
+
+
+@pytest.fixture(autouse=True)
+def isolated_key_pool(monkeypatch):
+    for name in ["PARALLEL_API_KEY", *(f"PARALLEL_API_KEY{i}" for i in range(1, 5))]:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(research, "_pool", None)
 
 
 def use_parallel_transport(monkeypatch, respond):
@@ -74,7 +82,6 @@ def test_requirements_refresh_preserves_saved_provenance_without_claiming_new_re
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure, message, attempts", [
-    (402, "quota or rate limit", 1),
     (429, "quota or rate limit", 3),
     (500, "temporarily unavailable", 3),
     (503, "temporarily unavailable", 3),
@@ -173,3 +180,164 @@ async def test_extract_uses_parallel_sdk_and_preserves_partial_results(monkeypat
     assert evidence["results"][0]["excerpts"] == ["Retrieved permit guidance"]
     assert len(evidence["results"][0]["full_content"]) == 12_000
     assert evidence["errors"] == [failure]
+    assert evidence["extractId"] == "extract-observed"
+    assert evidence["retrievedAt"] > 0
+
+
+def configure_four_keys(monkeypatch):
+    monkeypatch.delenv("PARALLEL_API_KEY", raising=False)
+    for i in range(1, 5):
+        monkeypatch.setenv(f"PARALLEL_API_KEY{i}", f"test-slot-{i}")
+
+
+@pytest.mark.asyncio
+async def test_legacy_single_key_credit_exhaustion_is_actionable(monkeypatch):
+    requests = []
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(402, json={"error": {"message": "Insufficient credit"}})
+    use_parallel_transport(monkeypatch, respond)
+    with pytest.raises(research.ParallelCreditsExhausted, match="The configured Parallel API key has"):
+        await research.search_sources("Guidance", [])
+    assert len(requests) == 1
+
+
+def search_response():
+    return httpx.Response(200, json={"search_id": "search-after-failover", "results": [
+        {"url": "https://film.ca.gov/state-permits/", "title": "Observed source", "excerpts": ["Real retrieved text"], "publish_date": None}
+    ], "warnings": None})
+
+
+@pytest.mark.asyncio
+async def test_credit_failover_follows_all_four_keys_and_extract_reuses_active_key(monkeypatch):
+    requests = []
+    def respond(request):
+        key = request.headers["x-api-key"]
+        requests.append((key, request.url.path))
+        if key != "test-slot-4":
+            return httpx.Response(402, json={"error": {"message": "Insufficient credit"}})
+        if request.url.path.endswith("extract"):
+            return httpx.Response(200, json={"extract_id": "extract-after-failover", "results": [], "errors": []})
+        return search_response()
+
+    use_parallel_transport(monkeypatch, respond)
+    configure_four_keys(monkeypatch)
+    monkeypatch.setattr(research, "public_url", lambda value: value)
+    evidence = await research.search_sources("Find official guidance", ["state permits"])
+    extracted = await research.parallel_extract([evidence["results"][0]["url"]])
+    assert requests == [(f"test-slot-{i}", "/v1/search") for i in range(1, 5)] + [("test-slot-4", "/v1/extract")]
+    assert evidence["searchId"] == "search-after-failover"
+    assert evidence["results"][0]["excerpt"] == "Real retrieved text"
+    assert extracted["extractId"] == "extract-after-failover"
+    assert "test-slot" not in json.dumps([evidence, extracted])
+
+
+@pytest.mark.asyncio
+async def test_extract_credit_failure_advances_shared_search_key(monkeypatch):
+    requests = []
+    def respond(request):
+        key = request.headers["x-api-key"]
+        requests.append((key, request.url.path))
+        if request.url.path.endswith("extract"):
+            if key == "test-slot-1":
+                return httpx.Response(402, json={"error": {"message": "Insufficient credit"}})
+            return httpx.Response(200, json={"extract_id": "extract-next", "results": [], "errors": []})
+        return search_response()
+    use_parallel_transport(monkeypatch, respond)
+    configure_four_keys(monkeypatch)
+    monkeypatch.setattr(research, "public_url", lambda value: value)
+    await research.parallel_extract(["https://film.ca.gov/state-permits/"])
+    await research.search_sources("Guidance", [])
+    assert requests == [("test-slot-1", "/v1/extract"), ("test-slot-2", "/v1/extract"), ("test-slot-2", "/v1/search")]
+
+
+@pytest.mark.asyncio
+async def test_all_keys_exhausted_is_safe_actionable_and_recovers_after_cooldown(monkeypatch):
+    requests = []
+    replenished = False
+    now = [1000.0]
+    def respond(request):
+        requests.append(request.headers["x-api-key"])
+        if replenished:
+            return search_response()
+        return httpx.Response(402, json={"error": {"message": f"Credit unavailable for {request.headers['x-api-key']}"}})
+    use_parallel_transport(monkeypatch, respond)
+    configure_four_keys(monkeypatch)
+    monkeypatch.setattr(research.time, "monotonic", lambda: now[0])
+    for _ in range(2):
+        with pytest.raises(research.ParallelCreditsExhausted, match="All 4 configured Parallel API keys") as caught:
+            await research.search_sources("Guidance", [])
+        assert "Add credits or update" in str(caught.value)
+        assert "test-slot" not in str(caught.value)
+        assert caught.value.__cause__ is None
+        assert research.provider_failure(caught.value)
+    assert requests == [f"test-slot-{i}" for i in range(1, 5)]
+    replenished = True
+    now[0] += research.EXHAUSTED_KEY_COOLDOWN_SECONDS + 1
+    assert (await research.search_sources("Guidance", []))["searchId"] == "search-after-failover"
+    assert requests[-1] == "test-slot-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status, attempts", [(400, 1), (401, 1), (403, 1), (429, 3), (503, 3)])
+async def test_non_credit_errors_do_not_switch_key_with_four_keys(monkeypatch, status, attempts):
+    requests = []
+    def respond(request):
+        requests.append(request.headers["x-api-key"])
+        return httpx.Response(status, headers={"retry-after-ms": "1"}, json={"error": {"message": "Failure"}})
+    use_parallel_transport(monkeypatch, respond)
+    configure_four_keys(monkeypatch)
+    with pytest.raises((RuntimeError, APIStatusError)):
+        await research.search_sources("Guidance", [])
+    assert requests == ["test-slot-1"] * attempts
+    assert research.parallel_key_pool().next_key(set()) == (0, "test-slot-1")
+
+
+@pytest.mark.asyncio
+async def test_authentication_error_preserves_type_without_exposing_provider_body(monkeypatch):
+    def respond(request):
+        return httpx.Response(401, json={"error": {"message": f"Rejected {request.headers['x-api-key']}"}})
+    use_parallel_transport(monkeypatch, respond)
+    with pytest.raises(AuthenticationError) as caught:
+        await research.search_sources("Guidance", [])
+    assert caught.value.status_code == 401
+    assert "credentials and account permissions" in str(caught.value)
+    assert "test-only" not in str(caught.value)
+    assert caught.value.body is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_credit_failures_do_not_skip_healthy_keys(monkeypatch):
+    requests = []
+    arrived = asyncio.Event()
+    first_count = 0
+    async def respond(request):
+        nonlocal first_count
+        key = request.headers["x-api-key"]
+        requests.append(key)
+        if key == "test-slot-1":
+            first_count += 1
+            if first_count == 4:
+                arrived.set()
+            await asyncio.wait_for(arrived.wait(), timeout=1)
+            return httpx.Response(402, json={"error": {"message": "Insufficient credit"}})
+        return search_response()
+    use_parallel_transport(monkeypatch, respond)
+    configure_four_keys(monkeypatch)
+    results = await asyncio.gather(*(research.search_sources("Guidance", []) for _ in range(4)))
+    assert len(results) == 4
+    assert requests.count("test-slot-1") == 4
+    assert requests.count("test-slot-2") == 4
+    assert set(requests) == {"test-slot-1", "test-slot-2"}
+
+
+def test_numbered_key_configuration_trims_deduplicates_and_rejects_ambiguous_first_key(monkeypatch):
+    configure_four_keys(monkeypatch)
+    monkeypatch.setenv("PARALLEL_API_KEY", " test-slot-1\n")
+    monkeypatch.setenv("PARALLEL_API_KEY2", "test-slot-1")
+    monkeypatch.setenv("PARALLEL_API_KEY3", "  ")
+    assert research.configured_parallel_keys() == ("test-slot-1", "test-slot-4")
+    monkeypatch.setenv("PARALLEL_API_KEY", "different-secret")
+    with pytest.raises(RuntimeError, match="either PARALLEL_API_KEY or PARALLEL_API_KEY1") as caught:
+        research.configured_parallel_keys()
+    assert "different-secret" not in str(caught.value)

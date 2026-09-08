@@ -30,7 +30,7 @@ Convex is authoritative for boards, memberships, entity revisions, dependencies,
 - Uploaded PDF/text screenplay retained as source; exact scene excerpts must match extracted pages.
 - Full-screenplay breakdown uses page-aware scene indexing, bounded model batches, saved-batch retry, and atomic publication. Large boards use a compact scene grid and visible-card rendering. See [processing limits and scale acceptance](docs/SCREENPLAY_SCALE.md).
 - Explicit clarification checkpoint before scene and research stages.
-- Web research uses Parallel Search and Extract only. Capacity limits, exhausted retries, and service failures remain visible; no alternate search provider is called. Request IDs, retrieval times, and cache status stay attached to sources. Returned URLs are allowlisted into agent results; official pilot requirements need CFC state-permit guidance or the named park’s own official page. Other park references remain unverified.
+- Web research uses Parallel Search and Extract only. Up to four configured keys are tried in order when Parallel reports insufficient credit (HTTP 402). Search and Extract share exhausted-key cooldowns within each agent process; authentication, rate limits, and service failures remain visible. Request IDs, retrieval times, and cache status stay attached to sources. Returned URLs are allowlisted into agent results; official pilot requirements need CFC state-permit guidance or the named park’s own official page. Other park references remain unverified.
 - Costs preserve published, quoted, estimated, and unknown states. Modeled rates and assumed quantities remain estimates. Shared charges deduplicate by documented coverage key, with conflicting units/quantities kept visible. Other currencies stay outside plan totals until conversion is supplied.
 - Budget and Creative plans keep their own selections, locks, constraints, totals, and schedules.
 - Material edits create a preview, mark dependency outputs stale, regenerate into staged results, apply only against unchanged revisions, and support conflict-safe undo.
@@ -85,6 +85,10 @@ export CONVEX_SITE_URL="https://your-deployment.convex.site"
 export AGENT_RUNTIME_RESOURCE="$(PYTHONPATH=agents agents/.venv/bin/python infra/deploy_agent.py)"
 ./infra/deploy_bridge.sh
 ```
+
+For four Parallel credentials, set `PARALLEL_API_KEY_COUNT=4` before both bootstrap and agent deployment. Bootstrap provisions `sceneatlas-parallel-api-key` and `sceneatlas-parallel-api-key-2`, `-3`, and `-4`, with access granted only to the agent service account. Add a version to each from the corresponding local `PARALLEL_API_KEY1` through `PARALLEL_API_KEY4`. The original `PARALLEL_API_KEY` remains supported for slot 1; configure only one first-key name unless both values match. Blank slots are ignored locally and duplicate values are tried once. The bridge and browser receive no Parallel credentials.
+
+Failover applies only to [Parallel's documented insufficient-credit response](https://docs.parallel.ai/resources/warnings-and-errors#402-payment-required-troubleshooting). Known exhausted keys are skipped for five minutes, then checked again so replenished credit can recover. Separate agent processes learn exhaustion independently; requests already in flight may finish on the earlier key. When all configured keys are exhausted, the run shows an actionable error; an Extract failure can retain the search excerpts already retrieved. This mechanism does not add account credit.
 
 Set `AGENT_BRIDGE_URL`, matching bridge/callback HMAC values, and Clerk settings in the target Convex deployment with `infra/configure_convex.sh`. Convex supplies `CONVEX_SITE_URL` automatically; set that variable only in the Google Cloud services. Configure the matching public Clerk/Convex variables in Vercel, then deploy the web app. To update the existing managed runtime, set `AGENT_RUNTIME_RESOURCE` before running `infra/deploy_agent.py`; omit it only when creating a new runtime.
 

@@ -5,9 +5,91 @@ import json
 import os
 import re
 import socket
+import threading
 import time
 from urllib.parse import urlparse
 from parallel import AsyncParallel, APIConnectionError, APIStatusError
+
+EXHAUSTED_KEY_COOLDOWN_SECONDS = 300
+EXTRACT_OBJECTIVE = "Location access, official filming requirements, current fees with units, official forms and source-linked imagery."
+
+
+class ParallelCreditsExhausted(RuntimeError):
+    """Every configured credential has insufficient available Parallel credits."""
+
+
+def configured_parallel_keys() -> tuple[str, ...]:
+    """Accept the original single key and the user's numbered four-key setup."""
+    legacy = os.getenv("PARALLEL_API_KEY", "").strip()
+    first = os.getenv("PARALLEL_API_KEY1", "").strip()
+    if legacy and first and legacy != first:
+        raise RuntimeError("Configure either PARALLEL_API_KEY or PARALLEL_API_KEY1 for the first Parallel key, not both.")
+    keys = [legacy or first, *(os.getenv(f"PARALLEL_API_KEY{i}", "").strip() for i in range(2, 5))]
+    unique = tuple(dict.fromkeys(key for key in keys if key))
+    if not unique:
+        raise RuntimeError("Parallel is not configured. Add PARALLEL_API_KEY to the agent deployment, or configure PARALLEL_API_KEY1 through PARALLEL_API_KEY4.")
+    return unique
+
+
+class ParallelKeyPool:
+    """Share credit cooldowns across concurrent Search and Extract requests."""
+
+    def __init__(self, keys: tuple[str, ...]):
+        self.keys = keys
+        self._exhausted_until: dict[int, float] = {}
+        self._lock = threading.Lock()
+
+    def next_key(self, attempted: set[int]) -> tuple[int, str] | None:
+        with self._lock:
+            now = time.monotonic()
+            return next(((index, key) for index, key in enumerate(self.keys)
+                         if index not in attempted and self._exhausted_until.get(index, 0) <= now), None)
+
+    def exhaust(self, index: int) -> None:
+        with self._lock:
+            self._exhausted_until[index] = time.monotonic() + EXHAUSTED_KEY_COOLDOWN_SECONDS
+
+
+_pool: ParallelKeyPool | None = None
+_pool_lock = threading.Lock()
+
+
+def parallel_key_pool() -> ParallelKeyPool:
+    global _pool
+    keys = configured_parallel_keys()
+    with _pool_lock:
+        if _pool is None or _pool.keys != keys:
+            _pool = ParallelKeyPool(keys)
+        return _pool
+
+
+async def parallel_call(operation: str, **kwargs):
+    """Advance in configured order only on Parallel's documented HTTP 402."""
+    pool = parallel_key_pool()
+    attempted: set[int] = set()
+    while selected := pool.next_key(attempted):
+        index, key = selected
+        attempted.add(index)
+        try:
+            async with AsyncParallel(api_key=key, max_retries=2, timeout=45) as client:
+                return await getattr(client, operation)(**kwargs)
+        except APIStatusError as error:
+            # https://docs.parallel.ai/resources/warnings-and-errors#402-payment-required-troubleshooting
+            # 429 can mean rate/quota limits; it is not evidence of exhausted credit.
+            if error.status_code != 402:
+                message = ("Check the agent's Parallel credentials and account permissions." if error.status_code in {401, 403}
+                           else "Retry later or check Parallel account capacity." if error.status_code == 429 or error.status_code >= 500
+                           else "Check the research request and agent configuration.")
+                # Preserve the SDK error type/status, without forwarding an arbitrary provider body.
+                raise type(error)(f"Parallel request failed (HTTP {error.status_code}). {message}", response=error.response, body=None) from None
+            pool.exhaust(index)
+    subject = "The configured Parallel API key has" if len(pool.keys) == 1 else f"All {len(pool.keys)} configured Parallel API keys have"
+    raise ParallelCreditsExhausted(
+        f"{subject} insufficient available credits. "
+        "Add credits or update the agent's Parallel secrets, then retry after up to five minutes "
+        "or restart the agent to recheck immediately."
+    ) from None
+
 
 def bound_context(value, *, depth: int = 0):
     """Bound every nested extraction value before it reaches the model context."""
@@ -37,11 +119,7 @@ def public_url(url: str) -> str:
 
 async def parallel_search(objective: str, queries: list[str]) -> dict:
     """Discover real locations and requirements with Parallel Search; preserve search IDs and excerpts."""
-    key = os.environ.get("PARALLEL_API_KEY")
-    if not key:
-        raise RuntimeError("Parallel Search is not configured. Add PARALLEL_API_KEY to the agent deployment.")
-    async with AsyncParallel(api_key=key, max_retries=2, timeout=45) as client:
-        response = await client.search(objective=objective[:5000], search_queries=[query[:500] for query in queries[:4]], max_chars_total=32000)
+    response = await parallel_call("search", objective=objective[:5000], search_queries=[query[:500] for query in queries[:4]], max_chars_total=32000)
     data = response.model_dump(mode="json")
     return {"provider": "parallel", "searchId": data.get("search_id", ""), "retrievedAt": int(time.time()*1000),
             "results": [{"url": r["url"], "title": r.get("title", r["url"]),
@@ -63,10 +141,14 @@ def research_request(target: dict, answers: list[dict]) -> tuple[str, list[str]]
 
 def provider_failure(error: Exception) -> str | None:
     """Identify capacity and transient errors while preserving auth/config failures."""
+    if isinstance(error, ParallelCreditsExhausted):
+        return "All configured Parallel keys have insufficient available credits"
     if isinstance(error, APIConnectionError):
         return "Parallel connection or timeout failure"
     if isinstance(error, APIStatusError):
-        if error.status_code in {402, 429}:
+        if error.status_code == 402:
+            return "Parallel has insufficient available credits"
+        if error.status_code == 429:
             return "Parallel quota or rate limit reached"
         if error.status_code >= 500:
             return "Parallel service temporarily unavailable"
@@ -92,12 +174,12 @@ async def parallel_extract(urls: list[str]) -> dict:
             continue
     if not safe:
         return {"results": [], "errors": ["No usable public source URLs."]}
-    async with AsyncParallel(api_key=os.environ["PARALLEL_API_KEY"], max_retries=2, timeout=45) as client:
-        response = await client.extract(urls=safe, objective="Location access, official filming requirements, current fees with units, official forms and source-linked imagery.", max_chars_total=32000)
+    response = await parallel_call("extract", urls=safe, objective=EXTRACT_OBJECTIVE, max_chars_total=32000)
     data = response.model_dump(mode="json")
     # Evidence is bounded before inclusion in model context. Preserve source URL and title.
     bounded = [bound_context(item) for item in data.get("results", [])[:5]]
-    return {"results": bounded, "errors": data.get("errors", [])[:10]}
+    return {"provider": "parallel", "extractId": data.get("extract_id", ""), "retrievedAt": int(time.time() * 1000), "requestedUrls": safe,
+            "results": bounded, "errors": data.get("errors", [])[:10]}
 
 def official_source_applies(source: dict, location: dict) -> bool:
     """Pilot scope: CFC state-permit guidance or the named park's own official page."""

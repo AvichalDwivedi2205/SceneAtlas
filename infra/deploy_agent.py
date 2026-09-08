@@ -23,6 +23,19 @@ def package_spec(root: Path) -> tuple[Path, str]:
     return root / "agents", "sceneatlas"
 
 
+def parallel_secret_bindings(count: str = "1") -> dict[str, SecretRef]:
+    """Bind only provisioned slots; retain the original first-secret name."""
+    if count not in {"1", "2", "3", "4"}:
+        raise RuntimeError("PARALLEL_API_KEY_COUNT must be 1, 2, 3, or 4.")
+    return {
+        "PARALLEL_API_KEY" if index == 1 else f"PARALLEL_API_KEY{index}": SecretRef(
+            secret="sceneatlas-parallel-api-key" if index == 1 else f"sceneatlas-parallel-api-key-{index}",
+            version="latest",
+        )
+        for index in range(1, int(count) + 1)
+    }
+
+
 def deploy():
     project = required("GOOGLE_CLOUD_PROJECT")
     location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
@@ -42,7 +55,7 @@ def deploy():
         env_vars={
             "CONVEX_SITE_URL": callback_url,
             "AGENT_CALLBACK_SECRET": SecretRef(secret="sceneatlas-agent-callback", version="latest"),
-            "PARALLEL_API_KEY": SecretRef(secret="sceneatlas-parallel-api-key", version="latest"),
+            **parallel_secret_bindings(os.getenv("PARALLEL_API_KEY_COUNT", "1")),
             "GEMINI_MODEL": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
             "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true",
         },

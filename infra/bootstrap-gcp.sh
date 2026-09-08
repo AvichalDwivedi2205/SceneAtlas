@@ -8,6 +8,15 @@ SCENEATLAS_AGENT_SA="sceneatlas-agent@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccoun
 SCENEATLAS_BRIDGE_SA="sceneatlas-bridge@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com"
 SCENEATLAS_TASK_SA="sceneatlas-tasks@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com"
 SCENEATLAS_BUCKET="${GOOGLE_CLOUD_PROJECT}-sceneatlas-agent-staging"
+SCENEATLAS_PARALLEL_KEY_COUNT="${PARALLEL_API_KEY_COUNT:-1}"
+if [[ ! "$SCENEATLAS_PARALLEL_KEY_COUNT" =~ ^[1-4]$ ]]; then
+  echo "PARALLEL_API_KEY_COUNT must be 1, 2, 3, or 4." >&2
+  exit 1
+fi
+SCENEATLAS_PARALLEL_SECRETS=(sceneatlas-parallel-api-key)
+for ((SCENEATLAS_INDEX=2; SCENEATLAS_INDEX<=SCENEATLAS_PARALLEL_KEY_COUNT; SCENEATLAS_INDEX++)); do
+  SCENEATLAS_PARALLEL_SECRETS+=("sceneatlas-parallel-api-key-${SCENEATLAS_INDEX}")
+done
 
 gcloud config set project "$GOOGLE_CLOUD_PROJECT"
 gcloud services enable aiplatform.googleapis.com run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com cloudtasks.googleapis.com secretmanager.googleapis.com storage.googleapis.com iamcredentials.googleapis.com
@@ -22,14 +31,14 @@ gcloud storage buckets describe "gs://${SCENEATLAS_BUCKET}" >/dev/null 2>&1 || \
 gcloud tasks queues describe "$SCENEATLAS_QUEUE" --location="$SCENEATLAS_REGION" >/dev/null 2>&1 || \
   gcloud tasks queues create "$SCENEATLAS_QUEUE" --location="$SCENEATLAS_REGION" --max-concurrent-dispatches=8 --max-dispatches-per-second=4 --max-attempts=1
 
-for SCENEATLAS_SECRET in sceneatlas-parallel-api-key sceneatlas-agent-callback sceneatlas-bridge-dispatch; do
+for SCENEATLAS_SECRET in "${SCENEATLAS_PARALLEL_SECRETS[@]}" sceneatlas-agent-callback sceneatlas-bridge-dispatch; do
   gcloud secrets describe "$SCENEATLAS_SECRET" >/dev/null 2>&1 || gcloud secrets create "$SCENEATLAS_SECRET" --replication-policy=automatic
 done
 
 gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" --member="serviceAccount:${SCENEATLAS_AGENT_SA}" --role="roles/aiplatform.user" --condition=None >/dev/null
 gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" --member="serviceAccount:${SCENEATLAS_BRIDGE_SA}" --role="roles/aiplatform.user" --condition=None >/dev/null
 gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" --member="serviceAccount:${SCENEATLAS_BRIDGE_SA}" --role="roles/cloudtasks.enqueuer" --condition=None >/dev/null
-for SCENEATLAS_SECRET in sceneatlas-parallel-api-key sceneatlas-agent-callback; do
+for SCENEATLAS_SECRET in "${SCENEATLAS_PARALLEL_SECRETS[@]}" sceneatlas-agent-callback; do
   gcloud secrets add-iam-policy-binding "$SCENEATLAS_SECRET" --member="serviceAccount:${SCENEATLAS_AGENT_SA}" --role="roles/secretmanager.secretAccessor" --condition=None >/dev/null
 done
 for SCENEATLAS_SECRET in sceneatlas-agent-callback sceneatlas-bridge-dispatch; do
@@ -39,6 +48,10 @@ gcloud iam service-accounts add-iam-policy-binding "$SCENEATLAS_TASK_SA" --membe
 
 echo "GCP base ready. Add secret versions without putting values in shell history:"
 echo "  printf %s \"\$PARALLEL_API_KEY\" | gcloud secrets versions add sceneatlas-parallel-api-key --data-file=-"
+for ((SCENEATLAS_INDEX=2; SCENEATLAS_INDEX<=SCENEATLAS_PARALLEL_KEY_COUNT; SCENEATLAS_INDEX++)); do
+  echo "  printf %s \"\$PARALLEL_API_KEY${SCENEATLAS_INDEX}\" | gcloud secrets versions add sceneatlas-parallel-api-key-${SCENEATLAS_INDEX} --data-file=-"
+done
+echo "PARALLEL_API_KEY1 may be used in place of PARALLEL_API_KEY for the first secret."
 echo "  openssl rand -hex 32 | gcloud secrets versions add sceneatlas-agent-callback --data-file=-"
 echo "  openssl rand -hex 32 | gcloud secrets versions add sceneatlas-bridge-dispatch --data-file=-"
 echo "Staging bucket: gs://${SCENEATLAS_BUCKET}"

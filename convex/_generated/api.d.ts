@@ -26,6 +26,7 @@ import type * as planning from "../planning.js";
 import type * as presence from "../presence.js";
 import type * as runs from "../runs.js";
 import type * as screenplay from "../screenplay.js";
+import type * as variantSetup from "../variantSetup.js";
 
 import type {
   ApiFromModules,
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   presence: typeof presence;
   runs: typeof runs;
   screenplay: typeof screenplay;
+  variantSetup: typeof variantSetup;
 }>;
 
 /**

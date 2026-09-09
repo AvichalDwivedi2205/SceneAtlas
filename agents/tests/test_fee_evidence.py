@@ -108,3 +108,23 @@ def test_published_hourly_rate_is_not_a_confirmed_full_plan_quantity(unit, appro
     assert '45-minute' not in normalized['coverageReason']
     assert '$3 per hour' in normalized['source']['excerpt']
     assert normalized['source']['searchId'] == 'actual-search'
+
+
+@pytest.mark.parametrize('basis', ['published', 'quote', 'estimate', 'unknown'])
+@pytest.mark.parametrize('claim', [
+    'Production qualifies as a Simple Shoot (max 14 personnel, handheld equipment).',
+    'Production qualifies for the fees for simple shoots because the crew is small.',
+])
+def test_category_claim_is_removed_even_after_amount_is_unknown(basis, claim):
+    url = 'https://film.ca.gov/state-permits/state-parks-beaches/'
+    evidence = {'searchId': 'actual-search', 'retrievedAt': 100, 'results': [
+        {'url': url, 'title': 'State park filming', 'excerpt': 'Permit review fee: $100. The authority determines classification.'}]}
+    cost = {'label': 'Filming Permit Review Fee', 'basis': basis,
+            'amountMinor': None if basis == 'unknown' else 10000, 'currency': 'USD',
+            'unit': 'day', 'quantity': 1, 'assumptions': '', 'source': {'url': url},
+            'coverageReason': claim}
+    normalized = normalize_sources({'locations': [{'costs': [cost]}]}, evidence)['locations'][0]['costs'][0]
+    assert normalized['basis'] == 'unknown' and normalized['amountMinor'] is None
+    assert 'qualifies' not in normalized['coverageReason']
+    assert 'authority must confirm' in normalized['coverageReason'].lower()
+    assert 'alone do not establish' in normalized['coverageReason']

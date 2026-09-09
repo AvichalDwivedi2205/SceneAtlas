@@ -25,7 +25,7 @@ def fee_estimates_allowed(answers: list[dict]) -> bool:
 
 
 def mentions_shoot_classification(text: str) -> bool:
-    return bool(re.search(r"\b(?:simple|complex)[\s'\"-]+(?:shoot|film(?:ing)?|production)\b", text, re.I))
+    return bool(re.search(r"\b(?:simple|complex)[\s'\"-]+(?:shoots?|films?|filming|productions?)\b", text, re.I))
 
 
 class ParallelCreditsExhausted(RuntimeError):
@@ -349,8 +349,14 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
                 cost.update(basis="unknown", amountMinor=None,
                             assumptions="The retrieved evidence does not establish this fee amount. Confirm the applicable rate, quantity and category or obtain a quote.")
             classification_text = " ".join([cost.get("label", ""), explanation, (cost.get("source") or {}).get("excerpt", "")])
-            if cost.get("basis") in {"published", "quote"} and mentions_shoot_classification(classification_text):
-                cost.update(basis="estimate", assumptions="The authority must confirm the applicable simple/complex shoot category; this amount is a provisional category-based estimate.")
+            if mentions_shoot_classification(classification_text):
+                if cost.get("basis") in {"published", "quote"}:
+                    cost["basis"] = "estimate"
+                # Classification remains unconfirmed even if an earlier guard
+                # already removed the amount. Do not leave a contradictory
+                # eligibility claim in the cost's coverage explanation.
+                cost.update(coverageReason="The authority must confirm the applicable shoot category and eligibility for the complete production; crew size and handheld equipment alone do not establish qualification.",
+                            assumptions="The authority must confirm the applicable simple/complex shoot category and fees before this cost can be relied on.")
             if cost.get("basis") == "published" and re.search(r"\b(?:hours?|hourly|hrs?)\b", cost.get("unit", ""), re.I):
                 # A published hourly rate does not establish how many hours the
                 # whole plan will be billed. Scene durations can be estimates,

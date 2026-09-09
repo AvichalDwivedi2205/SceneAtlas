@@ -47,6 +47,12 @@ def _line_amount(cost: dict[str, Any]) -> int | None:
     return None if cost.get("amountMinor") is None else math.floor(cost["amountMinor"] * cost.get("quantity", 1) + .5)
 
 
+def _source_key(source: dict[str, Any]) -> str:
+    # One URL may support several passages and retrievals. Only identical
+    # source records deduplicate; never combine text under another retrieval.
+    return json.dumps(source, sort_keys=True, separators=(",", ":"))
+
+
 def build_manifest(task: dict[str, Any]) -> dict[str, Any]:
     entities = task.get("entities", [])
     run = task["run"]
@@ -117,7 +123,7 @@ def build_manifest(task: dict[str, Any]) -> dict[str, Any]:
                 "currency": plan["data"]["currency"], "unit": "location", "quantity": 1, "basis": "unknown", "coverageKey": f"{location['_id']}:unquoted",
                 "coverageReason": "No fee evidence attached", "assumptions": "Confirm applicable fees with the location authority."}]
         for source in location["data"].get("sources", []):
-            sources[source["url"]] = source
+            sources.setdefault(_source_key(source), source)
         for cost in location_costs:
             key = cost.get("coverageKey") or f"{location['_id']}:{cost['id']}"
             existing = costs.get(key)
@@ -131,7 +137,7 @@ def build_manifest(task: dict[str, Any]) -> dict[str, Any]:
             if cost.get("amountMinor") is None:
                 unresolved.append(f"Unquoted cost: {cost['label']} at {location['data']['name']}.")
             if cost.get("source"):
-                sources[cost["source"]["url"]] = cost["source"]
+                sources.setdefault(_source_key(cost["source"]), cost["source"])
         for req in location["data"].get("requirements", []):
             requirements.append({**req, "locationId": location["_id"], "locationName": location["data"]["name"]})
             if req.get("status") != "sourced":
@@ -139,7 +145,7 @@ def build_manifest(task: dict[str, Any]) -> dict[str, Any]:
             else:
                 unresolved.append(f"External confirmation required: {location['data']['name']} - {req['title']}; source guidance does not establish approval.")
             for source in req.get("sources", []):
-                sources[source["url"]] = source
+                sources.setdefault(_source_key(source), source)
         unresolved.append(f"Availability remains unverified: {location['data']['name']}.")
 
     location_ids = {item["location"]["id"] for item in selected}
@@ -331,9 +337,10 @@ def build_packet(task: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
         story.append(Paragraph("No unresolved items recorded. Availability and external approval still remain outside SceneAtlas.", body))
     story.append(Paragraph("Evidence index", h1))
     for index, source in enumerate(manifest["sources"], 1):
-        retrieved = datetime.fromtimestamp(source["retrievedAt"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        cached = " · Reused evidence" if source.get("cached") else ""
-        story.append(Paragraph(f'{index}. <link href="{escape(source["url"], quote=True)}" color="#48613b">{_clean(source["title"])}</link><br/>{_clean(source["excerpt"])}<br/>Retrieved: {_clean(retrieved)} · Provider: {_clean(source["provider"])}{cached}', tiny))
+        retrieved = datetime.fromtimestamp(source["retrievedAt"] / 1000, tz=timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", " UTC")
+        cached = "Reused evidence" if source.get("cached") is True else "Fresh retrieval" if source.get("cached") is False else "Cache status not recorded"
+        reference = source.get("searchId") or "Not recorded"
+        story.append(Paragraph(f'{index}. <link href="{escape(source["url"], quote=True)}" color="#48613b">{_clean(source["title"])}</link><br/>{_clean(source["excerpt"])}<br/>Retrieved: {_clean(retrieved)} · Provider: {_clean(source["provider"])} · {_clean(cached)}<br/>Request reference: {_clean(reference)}', tiny))
     story.append(Spacer(1, 14))
     story.append(Paragraph(f"Manifest preserves {len(manifest['recordVersions'])} source record versions. Download the accompanying JSON for machine-readable provenance.", tiny))
     doc.build(story, onFirstPage=footer, onLaterPages=footer)

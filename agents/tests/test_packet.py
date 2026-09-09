@@ -35,6 +35,46 @@ def test_manifest_deduplicates_shared_costs_and_keeps_unknowns():
     assert manifest["externalStatus"] == "not_submitted"
 
 
+def test_same_url_fee_and_requirement_passages_survive_manifest_and_pdf_once():
+    task = task_fixture()
+    location = task["entities"][2]["data"]
+    requirement_source = {**location["sources"][0], "provider": "parallel", "searchId": "search_permit_passage",
+        "excerpt": "Commercial filming requires a park film permit.", "retrievedAt": 1788917318814}
+    fee_source = {**requirement_source, "searchId": "search_fee_passage", "retrievedAt": 1788917320766,
+        "excerpt": "Vehicle Day Use: $12.00. Prices are subject to change."}
+    location["sources"] = [deepcopy(requirement_source)]
+    for cost in location["costs"][:2]:
+        cost.update(label="Vehicle Day Use", amountMinor=1200, unit="day", coverageKey="vehicle-day", coverageReason="One passenger car")
+    location["costs"][0]["source"] = fee_source
+    location["costs"][1]["source"] = dict(reversed(list(fee_source.items())))
+    location["requirements"][0]["sources"] = [requirement_source, deepcopy(requirement_source)]
+
+    content, manifest = build_packet(task)
+
+    assert manifest["sources"] == [requirement_source, fee_source]
+    text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(content)).pages)
+    evidence = " ".join(text.split("Evidence index", 1)[1].split())
+    for source in (requirement_source, fee_source):
+        assert evidence.count(source["excerpt"]) == 1
+        assert evidence.count(source["searchId"]) == 1
+    assert "01:28:38.814 UTC" in evidence
+    assert "01:28:40.766 UTC" in evidence
+
+
+@pytest.mark.parametrize("field,value", [("retrievedAt", 2), ("searchId", "search_second"), ("cached", True)])
+def test_same_passage_with_distinct_retrieval_provenance_is_not_deduplicated(field, value):
+    task = task_fixture()
+    location = task["entities"][2]["data"]
+    original = {**location["sources"][0], "searchId": "search_first"}
+    variant = {**original, field: value}
+    location["sources"] = [original, deepcopy(original)]
+    for cost in location["costs"][:2]:
+        cost["source"] = variant
+    location["requirements"][0]["sources"] = [deepcopy(original)]
+
+    assert build_manifest(task)["sources"] == [original, variant]
+
+
 def test_packet_is_readable_and_marks_draft():
     task = task_fixture()
     for cost in task["entities"][2]["data"]["costs"][:2]:

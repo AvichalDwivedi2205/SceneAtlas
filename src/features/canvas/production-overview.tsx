@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -14,6 +14,7 @@ import {
   type Edge,
   type Node,
   type NodeProps,
+  type OnNodesChange,
 } from "@xyflow/react";
 import {
   ArrowRight,
@@ -249,6 +250,22 @@ function OverviewCanvas(props: ProductionOverviewProps) {
   const { snapshot, actions, act, previewMode } = useBoard();
   const surface = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(false);
+  const [measurements, setMeasurements] = useState<
+    Record<string, OverviewNode["measured"]>
+  >({});
+  const onNodesChange = useCallback<OnNodesChange<OverviewNode>>((changes) => {
+    const dimensions = changes.filter((change) => change.type === "dimensions");
+    if (!dimensions.length) return;
+    // The projection owns position and content; ReactFlow owns measured size.
+    // Keep its measurements when a live snapshot replaces the projected nodes.
+    setMeasurements((previous) => {
+      const next = { ...previous };
+      for (const change of dimensions) {
+        if (change.dimensions) next[change.id] = change.dimensions;
+      }
+      return next;
+    });
+  }, []);
   const flow = useReactFlow<OverviewNode>();
   const editable = snapshot.role !== "viewer" && !previewMode;
   const script = snapshot.entities.find(
@@ -319,6 +336,7 @@ function OverviewCanvas(props: ProductionOverviewProps) {
       type: "overview",
       position: { x: narrow || !plans.length ? 0 : 220, y: 0 },
       width: narrow ? 360 : 400,
+      measured: measurements[rootId],
       style: { pointerEvents: "auto" },
       data: shared,
       ariaLabel: script
@@ -332,6 +350,7 @@ function OverviewCanvas(props: ProductionOverviewProps) {
         ? { x: 0, y: 330 + index * 285 }
         : { x: (index % 2) * 440, y: 330 + Math.floor(index / 2) * 285 },
       width: narrow ? 360 : 400,
+      measured: measurements[`overview:${planState.plan._id}`],
       style: { pointerEvents: "auto" },
       data: { ...shared, planState },
       ariaLabel: `${planState.name}, ${planState.budget}, ${planState.sceneCount} included scenes`,
@@ -404,6 +423,7 @@ function OverviewCanvas(props: ProductionOverviewProps) {
       <div className={styles.surface} ref={surface}>
         <ReactFlow<OverviewNode>
           nodes={nodes}
+          onNodesChange={onNodesChange}
           edges={edges}
           nodeTypes={nodeTypes}
           nodesDraggable={false}

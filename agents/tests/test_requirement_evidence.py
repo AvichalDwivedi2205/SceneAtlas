@@ -51,3 +51,15 @@ def test_cached_passage_does_not_claim_fresh_extraction():
     extracted = {'retrievedAt': 200, 'results': [{'url': URL, 'full_content': DETAIL + ' New material.'}]}
     assert attach_requirement_passage(source, {'title': 'Filming Permit', 'detail': DETAIL}, extracted)
     assert source == before
+
+
+def test_small_crew_cannot_establish_simple_shoot_eligibility():
+    result, evidence = fixture()
+    req = result['locations'][0]['requirements'][0]
+    req['detail'] = "This production qualifies as a 'Simple Shoot' because it has four crew and handheld equipment."
+    evidence['results'][0]['excerpt'] = 'Simple Shoot categories depend on personnel, equipment, locations and activities. The authority confirms the category.'
+    normalized = normalize_sources(result, evidence)['locations'][0]['requirements'][0]
+    assert normalized['status'] == 'unresolved'
+    assert 'authority must confirm' in normalized['detail']
+    assert 'qualifies' not in normalized['detail']
+    assert normalized['attachments'] == [] and 'formUrl' not in normalized

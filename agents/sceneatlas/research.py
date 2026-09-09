@@ -23,6 +23,10 @@ def fee_estimates_allowed(answers: list[dict]) -> bool:
                for answer in answers)
 
 
+def mentions_shoot_classification(text: str) -> bool:
+    return bool(re.search(r"\b(?:simple|complex)[\s'\"-]+(?:shoot|film(?:ing)?|production)\b", text, re.I))
+
+
 class ParallelCreditsExhausted(RuntimeError):
     """Every configured credential has insufficient available Parallel credits."""
 
@@ -316,12 +320,15 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
             explanation = " ".join(cost.get(key) or "" for key in ["assumptions", "coverageReason"])
             if cost.get("basis") in {"published", "quote"} and re.search(r"\b(mid[- ]?range|midpoint|assum(?:e[sd]?|ing)|estimated|rounded|rounding)\b", explanation, re.I):
                 cost["basis"] = "estimate"
-            if cost.get("basis") == "estimate" and not allow_fee_estimates:
-                cost.update(basis="unknown", amountMinor=None,
-                            assumptions="No producer approval for fee estimates. Confirm the applicable rate, quantity and fee category or obtain a quote before including an amount.")
             if cost.get("basis") in {"published", "quote"} and not attach_fee_amount_evidence(cost, extracted_evidence):
                 cost.update(basis="unknown", amountMinor=None,
                             assumptions="The retrieved evidence does not establish this fee amount. Confirm the applicable rate, quantity and category or obtain a quote.")
+            classification_text = " ".join([cost.get("label", ""), explanation, (cost.get("source") or {}).get("excerpt", "")])
+            if cost.get("basis") in {"published", "quote"} and mentions_shoot_classification(classification_text):
+                cost.update(basis="estimate", assumptions="The authority must confirm the applicable simple/complex shoot category; this amount is a provisional category-based estimate.")
+            if cost.get("basis") == "estimate" and not allow_fee_estimates:
+                cost.update(basis="unknown", amountMinor=None,
+                            assumptions="No producer approval for fee estimates. Confirm the applicable rate, quantity and fee category or obtain a quote before including an amount.")
             if cost.get("basis") == "unknown":
                 cost["amountMinor"] = None
         for req in location.get("requirements", []):
@@ -352,6 +359,9 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
                 raise ValueError("Requirement has no official source.")
             if req.get("status") == "sourced" and not substantive:
                 req.update(status="unresolved", detail="The saved official reference does not contain substantive guidance for this requirement. Confirm its applicability and details with the location authority.", attachments=[])
+                req.pop("formUrl", None)
+            if mentions_shoot_classification(" ".join(req.get(key, "") for key in ["title", "detail"])):
+                req.update(status="unresolved", detail="The source describes simple/complex shoot categories, but the authority must confirm this production's category, eligibility and applicable fees. Crew size and handheld equipment alone do not establish classification.", attachments=[])
                 req.pop("formUrl", None)
             req["externalStatus"] = "unverified"
         location["availability"] = "unverified"

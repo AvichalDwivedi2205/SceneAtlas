@@ -77,3 +77,15 @@ def test_unrelated_or_fresh_extract_cannot_rewrite_cached_fee_provenance(cached,
     extracted = {'retrievedAt': 200, 'results': [{'url': extract_url, 'excerpts': ['Fee: $100.']}]}
     assert not attach_fee_amount_evidence(cost, extracted)
     assert cost['source']['retrievedAt'] == 100
+
+
+@pytest.mark.parametrize('approved', [False, True])
+@pytest.mark.parametrize('coverage,excerpt', [
+    ("This production qualifies as a Simple Shoot.", 'Review fee: $100.'),
+    ('Review fee for filming.', 'Simple Shoot review fee: $100. Complex Shoot review fee: $250.'),
+])
+def test_category_specific_rates_need_confirmed_eligibility_or_estimate_consent(approved, coverage, excerpt):
+    cost = normalize_cost(excerpt, coverage=coverage, approved=approved)
+    assert cost['basis'] == ('estimate' if approved else 'unknown')
+    assert cost['amountMinor'] == (10000 if approved else None)
+    assert 'confirm' in cost['assumptions'].lower()

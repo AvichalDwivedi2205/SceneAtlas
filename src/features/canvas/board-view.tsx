@@ -556,7 +556,11 @@ function BoardInterior({
               onChange={(e) => setPlan(e.target.value)}
             >
               {!plans.length && (
-                <option value="">Upload a screenplay to start</option>
+                <option value="">
+                  {snapshot.entities.some((e) => e.data.kind === "script")
+                    ? "Choose scenes & plans"
+                    : "Upload a screenplay to start"}
+                </option>
               )}
               {plans.map((p) => (
                 <option key={p._id} value={p._id}>

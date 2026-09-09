@@ -106,3 +106,38 @@ def test_unrelated_park_coverage_amounts_cannot_supply_insurance_evidence():
     extracted = {'retrievedAt': 200, 'results': [{'url': 'https://www.parks.ca.gov/another-park', 'full_content': detail}]}
     req = normalize_sources(result, evidence, extracted_evidence=extracted)['locations'][0]['requirements'][0]
     assert req['status'] == 'unresolved' and req['sources'][0]['retrievedAt'] == 100
+
+
+@pytest.mark.parametrize('address', [
+    '7080 Hollywood Blvd., Suite 900, Hollywood, CA 90228',
+    '7080 Hollywood Blvd., Suite 902, Hollywood, CA 90028',
+])
+def test_certificate_address_cannot_change_source_digits(address):
+    result, evidence = fixture()
+    result['locations'][0]['requirements'][0].update(title='Certificate of Insurance',
+        detail=f'The certificate holder must be STATE OF CALIFORNIA at {address}.')
+    evidence['results'][0]['excerpt'] = 'Certificate holder needs to read STATE OF CALIFORNIA with the CFC address (7080 Hollywood Blvd., Suite 900, Hollywood, CA 90028).'
+    req = normalize_sources(result, evidence)['locations'][0]['requirements'][0]
+    assert req['status'] == 'unresolved'
+    assert address not in req['detail']
+    assert req['sources'][0]['excerpt'] == evidence['results'][0]['excerpt']
+
+
+def test_matching_certificate_address_keeps_exact_source_and_provenance():
+    result, evidence = fixture()
+    detail = 'Certificate holder must be STATE OF CALIFORNIA at 7080 Hollywood Blvd., Suite 900, Hollywood, CA 90028.'
+    result['locations'][0]['requirements'][0].update(title='Certificate of Insurance', detail=detail)
+    evidence['results'][0]['excerpt'] = detail
+    req = normalize_sources(result, evidence)['locations'][0]['requirements'][0]
+    assert req['status'] == 'sourced' and req['detail'] == detail
+    assert req['sources'][0]['excerpt'] == detail
+
+
+@pytest.mark.parametrize('phone,expected', [('8188800358', 'sourced'), ('+1 818-880-0358', 'sourced'), ('818-880-0359', 'unresolved')])
+def test_requirement_phone_formatting_is_allowed_but_changed_digits_are_not(phone, expected):
+    result, evidence = fixture()
+    result['locations'][0]['requirements'][0]['detail'] = f'Commercial filming requires contacting the park film permit coordinator at {phone}.'
+    evidence['results'][0]['excerpt'] = DETAIL
+    req = normalize_sources(result, evidence)['locations'][0]['requirements'][0]
+    assert req['status'] == expected
+    assert req['sources'][0]['excerpt'] == DETAIL

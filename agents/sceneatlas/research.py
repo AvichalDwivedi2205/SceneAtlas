@@ -255,24 +255,40 @@ def attach_fee_amount_evidence(cost: dict, extracted: dict | None = None) -> boo
     return False
 
 
-def monetary_values(text: str) -> set[tuple[str, Decimal]]:
-    """Normalize explicit currency amounts, including insurance shorthand such as $1 million."""
+def monetary_matches(text: str):
+    """Locate explicit currency amounts without treating addresses or phones as money."""
     number = r"\d+(?:,\d{3})*(?:\.\d+)?"
     scale = r"(?:\s*(?P<scale>thousand|million|billion|k|m)\b)?"
     patterns = [
         rf"(?<!\w)(?P<currency>US\s*\$|\$|USD|EUR|€|GBP|£)\s*(?P<number>{number}){scale}(?![\d,]|\.\d)",
         rf"(?<![\w$,])(?P<number>{number}){scale}\s*(?P<currency>USD|US dollars?|dollars?|EUR|euros?|GBP|pounds?)\b",
     ]
+    for pattern in patterns:
+        yield from re.finditer(pattern, text, re.I)
+
+
+def monetary_values(text: str) -> set[tuple[str, Decimal]]:
+    """Normalize explicit currency amounts, including insurance shorthand such as $1 million."""
     currencies = {"$": "USD", "US$": "USD", "DOLLAR": "USD", "DOLLARS": "USD", "USDOLLAR": "USD", "USDOLLARS": "USD",
                   "€": "EUR", "EURO": "EUR", "EUROS": "EUR", "£": "GBP", "POUND": "GBP", "POUNDS": "GBP"}
     scales = {None: 1, "thousand": 1000, "k": 1000, "million": 1000000, "m": 1000000, "billion": 1000000000}
     values = set()
-    for pattern in patterns:
-        for match in re.finditer(pattern, text, re.I):
-            currency = re.sub(r"\s", "", match["currency"]).upper()
-            amount = Decimal(match["number"].replace(",", "")) * scales[(match["scale"] or "").lower() or None]
-            values.add((currencies.get(currency, currency), amount))
+    for match in monetary_matches(text):
+        currency = re.sub(r"\s", "", match["currency"]).upper()
+        amount = Decimal(match["number"].replace(",", "")) * scales[(match["scale"] or "").lower() or None]
+        values.add((currencies.get(currency, currency), amount))
     return values
+
+
+def reference_numbers(text: str) -> set[str]:
+    """Compare non-monetary numeric details, retaining ZIP digits and normalizing US phones."""
+    characters = list(text)
+    for match in monetary_matches(text):
+        characters[match.start():match.end()] = " " * (match.end() - match.start())
+    plain = "".join(characters)
+    plain = re.sub(r"(?<!\d)(?:\+?1[\s.-]*)?\(?(\d{3})\)?[\s.-]*(\d{3})[\s.-]*(\d{4})(?!\d)",
+                   lambda match: "".join(match.groups()), plain)
+    return {number.replace(",", "") for number in re.findall(r"\b\d+(?:,\d{3})*(?:\.\d+)?\b", plain)}
 
 
 def attach_requirement_passage(source: dict, requirement: dict, extracted: dict | None = None) -> bool:
@@ -281,6 +297,7 @@ def attach_requirement_passage(source: dict, requirement: dict, extracted: dict 
     stop = {"this", "that", "with", "from", "have", "will", "must", "should", "their", "your", "there"}
     terms = words(" ".join(requirement.get(key, "") for key in ["title", "detail"])) - stop
     claimed_amounts = monetary_values(" ".join(requirement.get(key, "") for key in ["title", "detail"]))
+    claimed_numbers = reference_numbers(" ".join(requirement.get(key, "") for key in ["title", "detail"]))
     title_words = words(source.get("title", ""))
     passages = [(source.get("excerpt", ""), None)]
     if not source.get("cached"):
@@ -297,7 +314,8 @@ def attach_requirement_passage(source: dict, requirement: dict, extracted: dict 
             # Shared vocabulary alone cannot substantiate precise financial
             # claims (for example, insurance coverage limits). Keep them
             # unresolved unless the same applicable passage contains each sum.
-            if content - title_words and score >= 2 and claimed_amounts <= monetary_values(passage):
+            if (content - title_words and score >= 2 and claimed_amounts <= monetary_values(passage)
+                    and claimed_numbers <= reference_numbers(passage)):
                 candidates.append((score, passage, retrieved_at))
     if not candidates:
         return False

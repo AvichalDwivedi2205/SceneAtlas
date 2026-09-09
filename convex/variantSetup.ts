@@ -18,26 +18,109 @@ import { syncPlanDependencies, validatePlanScenes } from "./lib/planScope";
 import { entitySchema, type EntityData } from "../src/domain/model";
 import { effectivePlanSceneIds } from "../src/domain/scope";
 
-async function variantPair(
+/** Only an explicit producer selection creates branches; import creates none. */
+export const createPlans = mutation({
+  args: {
+    boardId: v.id("boards"),
+    plans: v.array(
+      v.object({
+        key: v.string(),
+        name: v.string(),
+        budgetMode: v.union(v.literal("fixed"), v.literal("uncapped")),
+        budgetMinor: v.union(v.number(), v.null()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireMember(ctx, args.boardId, "editor");
+    if (
+      !args.plans.length ||
+      args.plans.length > 8 ||
+      new Set(args.plans.map((p) => p.key)).size !== args.plans.length
+    )
+      throw new ConvexError("Add one to eight distinct plans at a time.");
+    const all = await ctx.db
+      .query("entities")
+      .withIndex("by_board", (q) => q.eq("boardId", args.boardId))
+      .collect();
+    const script = all.find(
+      (e) => e.kind === "script" && e.logicalKey === "script",
+    );
+    if (!script)
+      throw new ConvexError("Upload a screenplay before choosing plans.");
+    const existingPlans = all.filter((e) => e.kind === "plan");
+    // Later branches inherit production inputs, never location choices or outputs.
+    const template = existingPlans[0]?.data;
+    const prepared = args.plans.map((input) => {
+      if (!/^[a-zA-Z0-9_-]{1,80}$/.test(input.key))
+        throw new ConvexError("Invalid plan request key.");
+      if (
+        input.budgetMode === "fixed" &&
+        (!Number.isSafeInteger(input.budgetMinor) || input.budgetMinor! <= 0)
+      )
+        throw new ConvexError(
+          "Enter a positive cap for each fixed-budget plan.",
+        );
+      const data = entitySchema.parse({
+        ...template,
+        kind: "plan",
+        name: input.name.trim(),
+        budgetMode: input.budgetMode,
+        budgetMinor: input.budgetMinor,
+        currency: "USD",
+        priority: input.budgetMode === "fixed" ? "cost" : "creative",
+      });
+      if (data.kind !== "plan") throw new ConvexError("Choose plan records.");
+      const logicalKey = `plan:user:${input.key}`;
+      const existing = all.find((e) => e.logicalKey === logicalKey);
+      if (
+        existing &&
+        (existing.kind !== "plan" ||
+          existing.data.name !== data.name ||
+          existing.data.budgetMode !== input.budgetMode ||
+          existing.data.budgetMinor !== input.budgetMinor)
+      )
+        throw new ConvexError(
+          "This plan request was already saved with different settings. Reopen plan selection.",
+        );
+      return { data, logicalKey, existing };
+    });
+    const ids: Id<"entities">[] = [];
+    for (const [index, item] of prepared.entries()) {
+      if (item.existing) {
+        ids.push(item.existing._id);
+        continue;
+      }
+      const id = await putEntity(ctx, {
+        boardId: args.boardId,
+        actor: user._id,
+        data: item.data,
+        logicalKey: item.logicalKey,
+        ownerId: script._id,
+        scope: { kind: "workspace" },
+        x: (existingPlans.length + index) * 440,
+        y: 650,
+      });
+      await ctx.db.patch(id, { scope: { kind: "plan", planId: id } });
+      await connect(ctx, args.boardId, script._id, id, "production-input");
+      await syncPlanDependencies(ctx, (await ctx.db.get(id))!);
+      ids.push(id);
+    }
+    await ctx.db.patch(args.boardId, { updatedAt: Date.now() });
+    return ids;
+  },
+});
+
+async function selectedPlans(
   ctx: MutationCtx,
   boardId: Id<"boards">,
   ids: Id<"entities">[],
 ) {
-  if (ids.length !== 2 || new Set(ids).size !== 2)
-    throw new ConvexError(
-      "Choose two distinct variants: Budget plan and No fixed budget.",
-    );
+  if (!ids.length || new Set(ids).size !== ids.length)
+    throw new ConvexError("Choose at least one plan without duplicates.");
   const plans = await Promise.all(
     ids.map((id) => boardEntity(ctx, boardId, id)),
   );
-  if (
-    plans.some((p) => p.kind !== "plan") ||
-    plans.filter((p) => p.data.budgetMode === "fixed").length !== 1 ||
-    plans.filter((p) => p.data.budgetMode === "uncapped").length !== 1
-  )
-    throw new ConvexError(
-      "Choose one fixed-budget plan and one plan without a fixed budget.",
-    );
   return plans.map((plan) => {
     const data = entitySchema.parse(plan.data);
     if (data.kind !== "plan") throw new ConvexError("Choose plan records.");
@@ -50,9 +133,13 @@ export const configure = mutation({
   args: {
     boardId: v.id("boards"),
     plans: v.array(
-      v.object({ planId: v.id("entities"), expectedRevision: v.number() }),
+      v.object({
+        planId: v.id("entities"),
+        expectedRevision: v.number(),
+        budgetMinor: v.optional(v.number()),
+      }),
     ),
-    budgetMinor: v.number(),
+    budgetMinor: v.optional(v.number()),
     idealShoot: v.string(),
     dates: v.array(v.string()),
     timezone: v.string(),
@@ -80,7 +167,7 @@ export const configure = mutation({
   },
   handler: async (ctx, args) => {
     const { user } = await requireMember(ctx, args.boardId, "editor");
-    const plans = await variantPair(
+    const plans = await selectedPlans(
       ctx,
       args.boardId,
       args.plans.map((p) => p.planId),
@@ -128,12 +215,17 @@ export const configure = mutation({
       throw new ConvexError(
         "Wait for screenplay processing to finish before saving setup.",
       );
-    if (!Number.isSafeInteger(args.budgetMinor) || args.budgetMinor <= 0)
+    if (
+      args.budgetMinor !== undefined &&
+      (!Number.isSafeInteger(args.budgetMinor) || args.budgetMinor <= 0)
+    )
       throw new ConvexError(
         "Enter a positive fixed budget in minor currency units.",
       );
     if (!args.idealShoot.trim())
-      throw new ConvexError("Describe the intended shoot for both variants.");
+      throw new ConvexError(
+        "Describe the intended shoot for the selected plans.",
+      );
     if (!args.dates.length || new Set(args.dates).size !== args.dates.length)
       throw new ConvexError(
         "Choose at least one shoot date without duplicates.",
@@ -151,7 +243,7 @@ export const configure = mutation({
     )
       throw new ConvexError("Answer each question only once.");
 
-    // Collect and validate every write before updating either branch.
+    // Collect and validate every write before updating any selected branch.
     const updates = new Map<
       Id<"entities">,
       { entity: Doc<"entities">; data: EntityData }
@@ -159,7 +251,12 @@ export const configure = mutation({
     const configured = plans.map((plan) => {
       const data = entitySchema.parse({
         ...plan.data,
-        budgetMinor: plan.data.budgetMode === "fixed" ? args.budgetMinor : null,
+        budgetMinor:
+          plan.data.budgetMode === "fixed"
+            ? (args.plans.find((p) => p.planId === plan._id)?.budgetMinor ??
+              args.budgetMinor ??
+              plan.data.budgetMinor)
+            : null,
         idealShoot: args.idealShoot,
         dates: args.dates,
         timezone: args.timezone,
@@ -173,19 +270,28 @@ export const configure = mutation({
           : { sceneScope: { mode: "selected", sceneIds: args.sceneIds } }),
       });
       if (data.kind !== "plan") throw new ConvexError("Choose plan records.");
+      if (
+        data.budgetMode === "fixed" &&
+        (!Number.isSafeInteger(data.budgetMinor) || data.budgetMinor! <= 0)
+      )
+        throw new ConvexError(
+          "Enter a positive cap for each fixed-budget plan.",
+        );
       updates.set(plan._id, { entity: plan, data });
       return { ...plan, data };
     });
     for (const plan of configured)
       await validatePlanScenes(ctx, args.boardId, plan.data);
     const selectedIds = effectivePlanSceneIds(configured[0].data, all);
-    const secondIds = effectivePlanSceneIds(configured[1].data, all);
     if (
-      JSON.stringify([...selectedIds].sort()) !==
-      JSON.stringify([...secondIds].sort())
+      configured.some(
+        (plan) =>
+          JSON.stringify([...selectedIds].sort()) !==
+          JSON.stringify(effectivePlanSceneIds(plan.data, all).sort()),
+      )
     )
       throw new ConvexError(
-        "Both variants must include the same scenes. Choose their shared scene selection.",
+        "The selected plans must include the same scenes. Choose their shared scene selection.",
       );
     if (
       (args.durationMinutes !== undefined || args.applyTimeWindows) &&
@@ -242,9 +348,9 @@ export const configure = mutation({
     const creativeData = entitySchema.parse({
       kind: "question",
       key: "variant-creative-brief",
-      prompt: "What creative priorities should both variants share?",
+      prompt: "What creative priorities should the selected plans share?",
       reason:
-        "Use the producer's creative brief when researching locations for both variants.",
+        "Use the producer's creative brief when researching locations for the selected plans.",
       suggestions: [],
       blocks: ["research"],
       answer: args.idealShoot,
@@ -366,12 +472,12 @@ export const configure = mutation({
   },
 });
 
-/** One canonical scene job feeds both branches; subsequent schedules stay independent. */
+/** One canonical scene job feeds the selected branches; subsequent schedules stay independent. */
 export const startResearch = mutation({
   args: { boardId: v.id("boards"), planIds: v.array(v.id("entities")) },
   handler: async (ctx, args) => {
     const { user } = await requireMember(ctx, args.boardId, "editor");
-    const plans = await variantPair(ctx, args.boardId, args.planIds);
+    const plans = await selectedPlans(ctx, args.boardId, args.planIds);
     const [all, runs, choices] = await Promise.all([
       ctx.db
         .query("entities")
@@ -392,11 +498,14 @@ export const startResearch = mutation({
     const sceneIds = effectivePlanSceneIds(plans[0].data, all);
     if (
       !sceneIds.length ||
-      JSON.stringify([...sceneIds].sort()) !==
-        JSON.stringify(effectivePlanSceneIds(plans[1].data, all).sort())
+      plans.some(
+        (plan) =>
+          JSON.stringify([...sceneIds].sort()) !==
+          JSON.stringify(effectivePlanSceneIds(plan.data, all).sort()),
+      )
     )
       throw new ConvexError(
-        "Choose the same nonempty scene selection for both variants.",
+        "Choose the same nonempty scene selection for the selected plans.",
       );
     const work = sceneIds.map((sceneId) => {
       const scene = all.find((e) => e._id === sceneId)!;

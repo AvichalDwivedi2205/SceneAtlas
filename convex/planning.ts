@@ -14,8 +14,12 @@ export const startReadyPlans = mutation({
   args: { boardId: v.id("boards"), planIds: v.array(v.id("entities")) },
   handler: async (ctx, args) => {
     const { user } = await requireMember(ctx, args.boardId, "editor");
-    if (args.planIds.length !== 2 || new Set(args.planIds).size !== 2)
-      throw new ConvexError("Choose two distinct plans to generate together.");
+    if (
+      !args.planIds.length ||
+      args.planIds.length > 8 ||
+      new Set(args.planIds).size !== args.planIds.length
+    )
+      throw new ConvexError("Choose one to eight distinct plans to generate.");
     const plans = await Promise.all(
       args.planIds.map((id) => boardEntity(ctx, args.boardId, id)),
     );

@@ -157,9 +157,9 @@ it.each([100, 202])(
     expect(result.entities.filter((e) => e.kind === "scene")).toHaveLength(
       count,
     );
-    expect(result.entities.filter((e) => e.kind === "plan")).toHaveLength(2);
-    expect(result.nodes).toHaveLength(count + 3);
-    expect(result.edges).toHaveLength(count * 3 + 2);
+    expect(result.entities.filter((e) => e.kind === "plan")).toHaveLength(0);
+    expect(result.nodes).toHaveLength(count + 1);
+    expect(result.edges).toHaveLength(count);
     expect(result.nodes.find((n) => n.entityId === scriptId)).toEqual(
       before.nodes[0],
     );
@@ -171,12 +171,12 @@ it.each([100, 202])(
           .query("dependencies")
           .withIndex("by_board", (q) => q.eq("boardId", boardId))
           .collect(),
-      ).toHaveLength(count * 3 + 2);
+      ).toHaveLength(count);
       const placements = await boardPlacements(ctx, boardId);
-      expect(placements).toHaveLength(count + 3);
+      expect(placements).toHaveLength(count + 1);
     });
     expect(
       (await owner.query(api.boards.snapshot, { boardId })).edges,
-    ).toHaveLength(count * 3 + 2);
+    ).toHaveLength(count);
   },
 );

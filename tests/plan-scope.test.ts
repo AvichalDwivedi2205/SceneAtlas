@@ -564,6 +564,70 @@ describe("plan scene membership at Convex boundaries", () => {
     expect(snapshot.choices).toHaveLength(10);
   });
 
+  it("generates only one selected schedule, and supports three independent budget schedules", async () => {
+    const f = await fixture("selected", true);
+    const first = await f.owner.mutation(api.planning.startReadyPlans, {
+      boardId: f.boardId,
+      planIds: [f.planIds[0]],
+    });
+    expect(first).toHaveLength(1);
+    expect(first[0].runId).toBeTruthy();
+    const third = await f.t.run(async (ctx) => {
+      const original = (await ctx.db.get(f.planIds[0]))!;
+      const id = await putEntity(ctx, {
+        boardId: f.boardId,
+        actor: "test",
+        logicalKey: "third-budget",
+        scope: { kind: "workspace" },
+        data: entitySchema.parse({
+          ...original.data,
+          name: "Budget three",
+          budgetMinor: 1600000,
+        }),
+      });
+      await ctx.db.patch(id, { scope: { kind: "plan", planId: id } });
+      const second = (await ctx.db.get(f.planIds[1]))!;
+      await ctx.db.patch(second._id, {
+        data: {
+          ...second.data,
+          budgetMode: "fixed",
+          budgetMinor: 1200000,
+          priority: "cost",
+        },
+      });
+      for (const choice of await ctx.db
+        .query("choices")
+        .withIndex("by_plan_scene", (q) => q.eq("planId", original._id))
+        .collect()) {
+        await ctx.db.insert("choices", {
+          boardId: choice.boardId,
+          planId: id,
+          sceneId: choice.sceneId,
+          locationId: choice.locationId,
+          locked: choice.locked,
+          revision: choice.revision,
+        });
+      }
+      await syncPlanDependencies(ctx, (await ctx.db.get(id))!);
+      return id;
+    });
+    const all = await f.owner.mutation(api.planning.startReadyPlans, {
+      boardId: f.boardId,
+      planIds: [...f.planIds, third],
+    });
+    expect(all).toHaveLength(3);
+    expect(
+      all.every((result) => result.runId && result.blockers.length === 0),
+    ).toBe(true);
+    expect(all[0].runId).toBe(first[0].runId);
+    const snapshot = await f.owner.query(api.boards.snapshot, {
+      boardId: f.boardId,
+    });
+    expect(snapshot.runs.filter((run) => run.kind === "schedule")).toHaveLength(
+      3,
+    );
+  });
+
   it("queues two independent ready-plan jobs and deduplicates a repeated click", async () => {
     const f = await fixture("selected", true);
     const outcomes = await f.owner.mutation(api.planning.startReadyPlans, {

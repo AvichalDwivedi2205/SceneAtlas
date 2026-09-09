@@ -167,50 +167,6 @@ export async function publishResult(
     sceneIds.set(data.number, id);
     await connect(ctx, boardId, scriptId, id, "scene");
   }
-  if (scriptId && (result.script || result.scenes.length)) {
-    for (const [i, p] of [
-      {
-        name: "Budget plan",
-        budgetMode: "fixed",
-        budgetMinor: null,
-        priority: "cost",
-      },
-      {
-        name: "No fixed budget",
-        budgetMode: "uncapped",
-        budgetMinor: null,
-        priority: "creative",
-      },
-    ].entries()) {
-      // Ingest creates the two branches before setup. A later breakdown must
-      // retain the producer's saved inputs, scope, position, and revision.
-      const existing = await ctx.db
-        .query("entities")
-        .withIndex("by_board_key", (q) =>
-          q.eq("boardId", boardId).eq("logicalKey", `plan:${i}`),
-        )
-        .unique();
-      if (existing) continue;
-      const data = entitySchema.parse({ kind: "plan", ...p });
-      const id = await putEntity(ctx, {
-        placements,
-        boardId,
-        data,
-        scope: { kind: "workspace" },
-        ownerId: scriptId,
-        logicalKey: `plan:${i}`,
-        actor,
-        x: i * 780,
-        y: !result.scenes.length
-          ? 650
-          : result.scenes.length > 12
-            ? 850 + Math.ceil(result.scenes.length / sceneColumns) * 900
-            : 1750,
-      });
-      await ctx.db.patch(id, { scope: { kind: "plan", planId: id } });
-      await connect(ctx, boardId, scriptId, id, "production-input");
-    }
-  }
   for (const q of result.questions) {
     if (q.data.kind !== "question")
       throw new ConvexError("Invalid clarification result.");

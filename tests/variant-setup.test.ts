@@ -24,7 +24,11 @@ const settings = {
   timingBasis: "estimate" as const,
 };
 
-async function fixture(count = 3, question = false) {
+async function fixture(
+  count = 3,
+  question = false,
+  modes: ("fixed" | "uncapped")[] = ["fixed", "uncapped"],
+) {
   const t = convexTest(schema, modules);
   const owner = t.withIdentity(identity("variant-owner"));
   const userId = await owner.mutation(api.boards.initialize);
@@ -81,10 +85,23 @@ async function fixture(count = 3, question = false) {
   const snapshot = () => owner.query(api.boards.snapshot, { boardId });
   const initial = await snapshot();
   const scriptId = initial.entities.find((e) => e.kind === "script")!._id;
-  const planIds = initial.entities
-    .filter((e) => e.kind === "plan")
-    .sort((a, b) => a.logicalKey.localeCompare(b.logicalKey))
-    .map((e) => e._id);
+  expect(initial.entities.filter((e) => e.kind === "plan")).toHaveLength(0);
+  const planIds = modes.length
+    ? await owner.mutation(api.variantSetup.createPlans, {
+        boardId,
+        plans: modes.map((budgetMode, index) => ({
+          key: `fixture-${index}`,
+          name:
+            budgetMode === "fixed"
+              ? index
+                ? `Budget plan ${index + 1}`
+                : "Budget plan"
+              : "No fixed budget",
+          budgetMode,
+          budgetMinor: budgetMode === "fixed" ? (index + 1) * 250000 : null,
+        })),
+      })
+    : [];
   const config = async () => ({
     boardId,
     ...settings,
@@ -183,11 +200,178 @@ async function evidence(
 }
 
 describe("initial variant setup", () => {
-  it("creates both children during ingest and preserves their configured data, revisions and positions through breakdown", async () => {
+  it.each([
+    ["fixed"],
+    ["uncapped"],
+    ["fixed", "fixed", "fixed"],
+    ["fixed", "fixed", "uncapped"],
+  ] as ("fixed" | "uncapped")[][])(
+    "configures exactly the selected modes %j and shares research without adding branches",
+    async (...modes) => {
+      const f = await fixture(1, false, modes);
+      const before = await f.snapshot();
+      const caps = before.entities
+        .filter((e) => e.kind === "plan")
+        .map((e) => e.data.budgetMinor);
+      const input = { ...(await f.config()), budgetMinor: undefined };
+      await f.owner.mutation(api.variantSetup.configure, {
+        ...input,
+        sceneIds: f.sceneIds,
+        durationMinutes: 45,
+        applyTimeWindows: true,
+      });
+      const jobs = await f.owner.mutation(api.variantSetup.startResearch, {
+        boardId: f.boardId,
+        planIds: f.planIds,
+      });
+      expect(jobs).toHaveLength(1);
+      const after = await f.snapshot();
+      expect(
+        after.entities
+          .filter((e) => e.kind === "plan")
+          .map((e) => e.data.budgetMode),
+      ).toEqual(modes);
+      expect(
+        after.entities
+          .filter((e) => e.kind === "plan")
+          .map((e) => e.data.budgetMinor),
+      ).toEqual(caps);
+      expect(after.runs.filter((r) => r.kind === "research")).toHaveLength(1);
+    },
+  );
+
+  it("creates no plans during import or breakdown; explicit creation is retry-safe and all-or-nothing", async () => {
+    const f = await fixture(2, false, []);
+    const selected = {
+      key: "chosen-budget",
+      name: "Lean shoot",
+      budgetMode: "fixed" as const,
+      budgetMinor: 250000,
+    };
+    const before = await f.snapshot();
+    expect(before.entities.some((e) => e.kind === "plan")).toBe(false);
+    await expect(
+      f.owner.mutation(api.variantSetup.createPlans, {
+        boardId: f.boardId,
+        plans: [selected, { ...selected, key: "bad", budgetMinor: 0 }],
+      }),
+    ).rejects.toThrow();
+    expect(await f.snapshot()).toEqual(before);
+    for (const plans of [
+      [],
+      [selected, selected],
+      [{ ...selected, budgetMode: "uncapped" as const }],
+    ])
+      await expect(
+        f.owner.mutation(api.variantSetup.createPlans, {
+          boardId: f.boardId,
+          plans,
+        }),
+      ).rejects.toThrow();
+    const ids = await f.owner.mutation(api.variantSetup.createPlans, {
+      boardId: f.boardId,
+      plans: [selected],
+    });
+    const saved = await f.snapshot();
+    expect(
+      await f.owner.mutation(api.variantSetup.createPlans, {
+        boardId: f.boardId,
+        plans: [selected],
+      }),
+    ).toEqual(ids);
+    const after = await f.snapshot();
+    expect(after.entities).toEqual(saved.entities);
+    expect(after.entities.filter((e) => e.kind === "plan")).toHaveLength(1);
+    expect(after.runs).toEqual(before.runs);
+    expect(
+      after.edges.filter(
+        (e) => e.sourceId === f.scriptId && ids.includes(e.targetId),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("adds a budget branch after work starts without copying choices or changing existing plans", async () => {
+    const f = await fixture(1, false, ["fixed"]);
+    await f.owner.mutation(api.variantSetup.configure, {
+      ...(await f.config()),
+      sceneIds: f.sceneIds,
+      durationMinutes: 45,
+      applyTimeWindows: true,
+    });
+    const [job] = await f.owner.mutation(api.variantSetup.startResearch, {
+      boardId: f.boardId,
+      planIds: f.planIds,
+    });
+    await evidence(f, f.sceneIds[0], job.runId);
+    const candidate = (await f.snapshot()).entities.find(
+      (e) => e.kind === "location",
+    )!;
+    await f.owner.mutation(api.planning.select, {
+      boardId: f.boardId,
+      planId: f.planIds[0],
+      sceneId: f.sceneIds[0],
+      locationId: candidate._id,
+      locked: true,
+      expectedRevision: 0,
+    });
+    const before = await f.snapshot();
+    const [added] = await f.owner.mutation(api.variantSetup.createPlans, {
+      boardId: f.boardId,
+      plans: [
+        {
+          key: "expanded",
+          name: "Expanded shoot",
+          budgetMode: "fixed",
+          budgetMinor: 1000000,
+        },
+      ],
+    });
+    const after = await f.snapshot();
+    expect(after.choices).toEqual(before.choices);
+    expect(after.entities.filter((e) => f.planIds.includes(e._id))).toEqual(
+      before.entities.filter((e) => f.planIds.includes(e._id)),
+    );
+    expect(after.entities.find((e) => e._id === added)!.data).toMatchObject({
+      name: "Expanded shoot",
+      budgetMinor: 1000000,
+      dates: settings.dates,
+      sceneScope: { mode: "selected", sceneIds: f.sceneIds },
+    });
+    expect(after.choices.some((c) => c.planId === added)).toBe(false);
+  });
+
+  it("rejects plan creation without membership or a screenplay", async () => {
+    const f = await fixture(0, false, []);
+    const plans = [
+      {
+        key: "one",
+        name: "One",
+        budgetMode: "uncapped" as const,
+        budgetMinor: null,
+      },
+    ];
+    const outsider = f.t.withIdentity(identity("outsider"));
+    await outsider.mutation(api.boards.initialize);
+    await expect(
+      outsider.mutation(api.variantSetup.createPlans, {
+        boardId: f.boardId,
+        plans,
+      }),
+    ).rejects.toThrow();
+    const empty = await f.owner.mutation(api.boards.create, { name: "Empty" });
+    await expect(
+      f.owner.mutation(api.variantSetup.createPlans, { boardId: empty, plans }),
+    ).rejects.toThrow("Upload a screenplay");
+  });
+
+  it("creates only explicitly selected children and preserves their configured data, revisions and positions through breakdown", async () => {
     const f = await fixture(0, true);
     const initial = await f.snapshot();
     const plans = initial.entities.filter((e) => e.kind === "plan");
-    expect(plans.map((p) => p.logicalKey).sort()).toEqual(["plan:0", "plan:1"]);
+    expect(plans.map((p) => p.logicalKey).sort()).toEqual([
+      "plan:user:fixture-0",
+      "plan:user:fixture-1",
+    ]);
     expect(plans.map((p) => p.data.name)).toEqual([
       "Budget plan",
       "No fixed budget",
@@ -615,7 +799,7 @@ describe("shared variant research", () => {
         ...args,
         planIds: [f.planIds[0], f.planIds[0]],
       }),
-    ).rejects.toThrow("distinct");
+    ).rejects.toThrow("duplicates");
     await f.owner.mutation(api.variantSetup.configure, {
       ...(await f.config()),
       sceneIds: [],

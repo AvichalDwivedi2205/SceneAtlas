@@ -38,6 +38,77 @@ export type AgentResult = z.infer<typeof resultSchema>;
 export function locationKey(data: Extract<EntityData, { kind: "location" }>) {
   return `location:${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}:${new URL(data.sources[0].url).hostname}`;
 }
+type LocationData = Extract<EntityData, { kind: "location" }>;
+const normalizedIdentity = (value: string) =>
+  value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+/** A park's own named page can establish identity; statewide filming guidance cannot. */
+function parkIdentitySources(data: LocationData) {
+  const name = normalizedIdentity(data.name);
+  if (!name || /^(california )?(state )?parks?$/.test(name))
+    return new Set<string>();
+  return new Set(
+    data.sources.flatMap((source) => {
+      const title = normalizedIdentity(source.title)
+        .replace(/\bsp\b/g, "state park")
+        .replace(/\bsb\b/g, "state beach");
+      if (title !== name && !title.startsWith(`${name} `)) return [];
+      try {
+        const url = new URL(source.url);
+        if (
+          !["http:", "https:"].includes(url.protocol) ||
+          url.username ||
+          url.password ||
+          url.port ||
+          !(
+            url.hostname === "parks.ca.gov" ||
+            url.hostname.endsWith(".parks.ca.gov")
+          )
+        )
+          return [];
+        if (
+          /^\/(?:state-permits|film(?:ing)?(?:-permits?)?)(?:\/|$)/i.test(
+            url.pathname,
+          )
+        )
+          return [];
+        if (
+          url.pathname === "/" &&
+          !/^\d+$/.test(url.searchParams.get("page_id") ?? "")
+        )
+          return [];
+        // Compare official URL aliases without rewriting the saved evidence URLs.
+        url.protocol = "https:";
+        if (url.hostname === "www.parks.ca.gov") url.hostname = "parks.ca.gov";
+        url.hash = "";
+        return [url.href];
+      } catch {
+        return [];
+      }
+    }),
+  );
+}
+
+function sameParkIdentity(
+  candidate: LocationData,
+  existing: LocationData,
+  sources: Set<string>,
+) {
+  if (
+    normalizedIdentity(candidate.name) !== normalizedIdentity(existing.name) ||
+    existing.rejected
+  )
+    return false;
+  const authority = normalizedIdentity(candidate.authority);
+  const previousAuthority = normalizedIdentity(existing.authority);
+  if (authority && previousAuthority && authority !== previousAuthority)
+    return false;
+  return [...parkIdentitySources(existing)].some((url) => sources.has(url));
+}
 export async function publishResult(
   ctx: MutationCtx,
   run: Doc<"runs">,
@@ -298,13 +369,32 @@ export async function publishResult(
         }
       : { ...raw };
     if (run.scope.sceneId) data.sceneIds = [run.scope.sceneId];
-    const key = refreshTarget?.logicalKey ?? locationKey(data);
-    const previous = await ctx.db
+    let key = refreshTarget?.logicalKey ?? locationKey(data);
+    let previous = await ctx.db
       .query("entities")
       .withIndex("by_board_key", (q) =>
         q.eq("boardId", boardId).eq("logicalKey", key),
       )
       .unique();
+    if (!previous && run.kind === "research") {
+      const identitySources = parkIdentitySources(data);
+      if (identitySources.size) {
+        const locations = await ctx.db
+          .query("entities")
+          .withIndex("by_board_kind", (q) =>
+            q.eq("boardId", boardId).eq("kind", "location"),
+          )
+          .collect();
+        const matches = locations.filter((location) =>
+          sameParkIdentity(data, location.data, identitySources),
+        );
+        // Historical duplicates stay separate. Only an unambiguous match can reuse its existing key and ID.
+        if (matches.length === 1) {
+          previous = matches[0];
+          key = previous.logicalKey;
+        }
+      }
+    }
     if (previous)
       data.sceneIds = [
         ...new Set([...(previous.data.sceneIds as string[]), ...data.sceneIds]),

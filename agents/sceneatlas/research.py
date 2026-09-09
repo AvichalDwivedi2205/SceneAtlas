@@ -250,6 +250,35 @@ def attach_fee_amount_evidence(cost: dict, extracted: dict | None = None) -> boo
     return False
 
 
+def attach_requirement_passage(source: dict, requirement: dict, extracted: dict | None = None) -> bool:
+    """Keep a relevant provider passage instead of a page title; not an entailment or approval check."""
+    words = lambda text: set(re.findall(r"\b\w{4,}\b", text.lower()))
+    stop = {"this", "that", "with", "from", "have", "will", "must", "should", "their", "your", "there"}
+    terms = words(" ".join(requirement.get(key, "") for key in ["title", "detail"])) - stop
+    title_words = words(source.get("title", ""))
+    passages = [(source.get("excerpt", ""), None)]
+    if not source.get("cached"):
+        for item in (extracted or {}).get("results", []):
+            if item.get("url") == source.get("url"):
+                passages += [(text, extracted.get("retrievedAt")) for text in
+                             [item.get("full_content", ""), *item.get("excerpts", [])] if isinstance(text, str)]
+    candidates = []
+    for text, retrieved_at in passages:
+        for start in range(0, len(text), 800):
+            passage = text[start:start + 1600]
+            content = words(passage) - stop
+            score = len((content - title_words) & terms)
+            if content - title_words and score >= 2:
+                candidates.append((score, passage, retrieved_at))
+    if not candidates:
+        return False
+    _, passage, retrieved_at = max(candidates, key=lambda candidate: candidate[0])
+    source["excerpt"] = passage
+    if retrieved_at:
+        source["retrievedAt"] = retrieved_at
+    return True
+
+
 def normalize_sources(result: dict, evidence: dict, previous_location: dict | None = None, *, allow_fee_estimates: bool = False, extracted_evidence: dict | None = None) -> dict:
     """Reject fabricated source URLs and replace metadata with observed retrieval data."""
     discovered = {item["url"]: item for item in evidence.get("results", [])}
@@ -297,6 +326,7 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
                 cost["amountMinor"] = None
         for req in location.get("requirements", []):
             inapplicable = []
+            substantive = []
             for source in req.get("sources", []):
                 host = urlparse(source["url"]).hostname or ""
                 if source["url"] not in observed_urls or not (host == "film.ca.gov" or host == "parks.ca.gov" or host.endswith(".parks.ca.gov")):
@@ -311,6 +341,8 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
                 observed_source(source)
                 if not official_source_applies(source, location):
                     inapplicable.append(source)
+                elif attach_requirement_passage(source, req, extracted_evidence):
+                    substantive.append(source)
             if inapplicable:
                 req["sources"] = [source for source in req.get("sources", []) if source not in inapplicable]
                 if not req["sources"]:
@@ -318,6 +350,9 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
                     req.pop("formUrl", None)
             if req.get("status") == "sourced" and not req.get("sources"):
                 raise ValueError("Requirement has no official source.")
+            if req.get("status") == "sourced" and not substantive:
+                req.update(status="unresolved", detail="The saved official reference does not contain substantive guidance for this requirement. Confirm its applicability and details with the location authority.", attachments=[])
+                req.pop("formUrl", None)
             req["externalStatus"] = "unverified"
         location["availability"] = "unverified"
         # Model-supplied image addresses require separately verified media provenance.

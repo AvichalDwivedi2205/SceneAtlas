@@ -363,7 +363,8 @@ class SceneAtlasAgent(BaseAgent):
                 if kind == "requirements":
                     validate_requirements_target(result, target["data"])
                 result=normalize_sources(result,evidence,target["data"] if kind=="requirements" else None,
-                                         allow_fee_estimates=fee_estimates_allowed(answers))
+                                         allow_fee_estimates=fee_estimates_allowed(answers),
+                                         extracted_evidence=task.get("extractedEvidence"))
                 if kind=="research":
                     result["locations"]=result["locations"][:target["data"]["candidateCount"]]
                     for location in result["locations"]: location["sceneIds"]=[target["_id"]]

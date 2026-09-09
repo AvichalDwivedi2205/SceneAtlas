@@ -191,7 +191,7 @@ def test_missing_fees_policy_has_explicit_choices_and_preserves_known_rates():
     policy = next(q["data"] for q in required_intake() if q["data"]["key"] == "fee_estimate_policy")
     assert policy["suggestions"] == [research.FEE_ESTIMATES_UNKNOWN, research.FEE_ESTIMATES_ALLOW]
     url = "https://film.ca.gov/state-permits/"
-    evidence = {"results": [{"url": url, "title": "Official fee", "excerpt": "Flat fee."}], "retrievedAt": 1, "searchId": "fee"}
+    evidence = {"results": [{"url": url, "title": "Official fee", "excerpt": "Flat fee: USD 100.00 per application."}], "retrievedAt": 1, "searchId": "fee"}
     result = {"locations": [{"sources": [], "requirements": [], "costs": [{"basis": "published", "amountMinor": 10000, "source": {"url": url}}]}]}
     cost = research.normalize_sources(result, evidence)["locations"][0]["costs"][0]
     assert cost["basis"] == "published"

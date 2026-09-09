@@ -213,7 +213,44 @@ def official_source_applies(source: dict, location: dict) -> bool:
     title = re.sub(r"[^a-z0-9]", "", source.get("title", "").lower())
     return bool(name and name in title and (host == "parks.ca.gov" or host.endswith(".parks.ca.gov")))
 
-def normalize_sources(result: dict, evidence: dict, previous_location: dict | None = None, *, allow_fee_estimates: bool = False) -> dict:
+def fee_amount_match(text: str, amount_minor: int, currency: str = "USD"):
+    """Require an explicit monetary amount, not a coincidental phone/date number."""
+    if type(amount_minor) is not int or amount_minor < 0:
+        return None
+    major, minor = divmod(amount_minor, 100)
+    whole = "(?:" + "|".join(re.escape(value) for value in dict.fromkeys([str(major), f"{major:,}"])) + ")"
+    fraction = r"(?:\.00?)?" if minor == 0 else r"\." + (f"{minor:02d}" if minor % 10 else f"{minor // 10}0?")
+    number = whole + fraction
+    code = re.escape(currency)
+    prefix = {"USD": r"(?:US\s*\$|\$|USD)", "EUR": r"(?:€|EUR)", "GBP": r"(?:£|GBP)"}.get(currency, code)
+    found = re.search(rf"(?<!\w)(?:{prefix}\s*{number}|{number}\s*{code})(?![\d,]|\.\d)", text, re.I)
+    if not found and amount_minor == 0:
+        found = re.search(r"\b(?:no (?:application |permit |filming |parking )?fees?|free of charge|no charge)\b", text, re.I)
+    return found
+
+
+def attach_fee_amount_evidence(cost: dict, extracted: dict | None = None) -> bool:
+    """Attach the actual fee-bearing passage; this does not establish applicability or approval."""
+    source = cost.get("source")
+    if not source:
+        return False
+    passages = [(source.get("excerpt", ""), None)]
+    if not source.get("cached"):
+        for item in (extracted or {}).get("results", []):
+            if item.get("url") == source.get("url"):
+                passages += [(text, (extracted or {}).get("retrievedAt")) for text in
+                             [item.get("full_content", ""), *item.get("excerpts", [])] if isinstance(text, str)]
+    for text, retrieved_at in passages:
+        match = fee_amount_match(text, cost.get("amountMinor"), cost.get("currency", "USD"))
+        if match:
+            source["excerpt"] = text[max(0, match.start() - 200):match.end() + 450]
+            if retrieved_at:
+                source["retrievedAt"] = retrieved_at
+            return True
+    return False
+
+
+def normalize_sources(result: dict, evidence: dict, previous_location: dict | None = None, *, allow_fee_estimates: bool = False, extracted_evidence: dict | None = None) -> dict:
     """Reject fabricated source URLs and replace metadata with observed retrieval data."""
     discovered = {item["url"]: item for item in evidence.get("results", [])}
     previous = previous_location or {}
@@ -247,11 +284,15 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
                     cost.update(basis="unknown", amountMinor=None, assumptions="This official reference is not verified for the selected park. Obtain an applicable rate or quote.")
             if cost.get("basis") in {"published", "quote"} and not source:
                 cost.update(basis="unknown", amountMinor=None, assumptions="No item-level fee source was returned. Verify the published rate or obtain a quote.")
-            if cost.get("basis") in {"published", "quote"} and re.search(r"\b(mid[- ]?range|midpoint|assum(?:e[sd]?|ing)|estimated)\b", cost.get("assumptions") or "", re.I):
+            explanation = " ".join(cost.get(key) or "" for key in ["assumptions", "coverageReason"])
+            if cost.get("basis") in {"published", "quote"} and re.search(r"\b(mid[- ]?range|midpoint|assum(?:e[sd]?|ing)|estimated|rounded|rounding)\b", explanation, re.I):
                 cost["basis"] = "estimate"
             if cost.get("basis") == "estimate" and not allow_fee_estimates:
                 cost.update(basis="unknown", amountMinor=None,
                             assumptions="No producer approval for fee estimates. Confirm the applicable rate, quantity and fee category or obtain a quote before including an amount.")
+            if cost.get("basis") in {"published", "quote"} and not attach_fee_amount_evidence(cost, extracted_evidence):
+                cost.update(basis="unknown", amountMinor=None,
+                            assumptions="The retrieved evidence does not establish this fee amount. Confirm the applicable rate, quantity and category or obtain a quote.")
             if cost.get("basis") == "unknown":
                 cost["amountMinor"] = None
         for req in location.get("requirements", []):

@@ -14,7 +14,7 @@ from google.genai import types
 from pydantic import BaseModel, Field, ValidationError as ModelValidationError
 from .backend import Backend
 from .research import search_sources, parallel_extract, normalize_sources, provider_failure, research_request, EXTRACT_OBJECTIVE, fee_estimates_allowed, FEE_ESTIMATES_ALLOW, FEE_ESTIMATES_UNKNOWN
-from .result_schema import workflow_schema, breakdown_schema
+from .result_schema import workflow_schema, breakdown_schema, grounded_workflow_schema
 from .screenplay import extract_pages, index_scenes, selected_scenes, scene_batches, batch_key, validate_enrichment, assemble_scenes
 
 CONTRACT = json.loads(Path(__file__).with_name("entity.schema.json").read_text())
@@ -96,6 +96,14 @@ def isolate_model_input(callback_context, llm_request):
     llm_request.contents = [types.Content(role="user", parts=[types.Part(
         text="Complete the current task using only the supplied instruction and context. Return the required JSON."
     )])]
+    task = callback_context.state.get("task_context", {})
+    kind = task.get("run", {}).get("kind")
+    if kind in {"research", "requirements"}:
+        previous = next((entity["data"] for entity in task.get("entities", [])
+                         if entity.get("_id") == task["run"].get("targetId")), None) if kind == "requirements" else None
+        # The request owns this copy. Concurrent runs must never share source enums.
+        llm_request.config = (llm_request.config or types.GenerateContentConfig()).model_copy(deep=True)
+        llm_request.config.response_json_schema = grounded_workflow_schema(kind, task.get("searchEvidence", {}), previous)
 
 def intake_question(key: str, prompt: str, reason: str, blocks: list[str]) -> dict:
     return {"data": {"kind": "question", "key": key, "prompt": prompt, "reason": reason,

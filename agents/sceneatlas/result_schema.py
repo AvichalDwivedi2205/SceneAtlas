@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 CONTRACT = json.loads(Path(__file__).with_name("entity.schema.json").read_text())
 ENTITIES = {schema["properties"]["kind"]["const"]: schema for schema in CONTRACT["oneOf"]}
@@ -67,4 +68,37 @@ def workflow_schema(kind: str) -> dict:
         # A refresh belongs to one existing location, including on boards with
         # multiple selected locations. Zero permits a producer-input checkpoint.
         shape["properties"]["locations"]["maxItems"] = 1
+    return shape
+
+
+def grounded_workflow_schema(kind: str, evidence: dict, previous_location: dict | None = None) -> dict:
+    """Constrain reference choices before generation; provenance is still validated afterward."""
+    shape = workflow_schema(kind)
+    if kind not in {"research", "requirements"}:
+        return shape
+    observed = list(evidence.get("results", []))
+    if kind == "requirements" and previous_location:
+        observed += [*previous_location.get("sources", []),
+                     *(cost["source"] for cost in previous_location.get("costs", []) if cost.get("source")),
+                     *(source for requirement in previous_location.get("requirements", []) for source in requirement.get("sources", []))]
+    urls = list(dict.fromkeys(source["url"] for source in observed if isinstance(source.get("url"), str)))[:32]
+    official = [url for url in urls if (urlparse(url).hostname or "") == "film.ca.gov"
+                or (urlparse(url).hostname or "") == "parks.ca.gov"
+                or (urlparse(url).hostname or "").endswith(".parks.ca.gov")]
+    location = shape["properties"]["locations"]["items"]["properties"]
+    cost = location["costs"]["items"]["properties"]
+    requirement = location["requirements"]["items"]["properties"]
+    if urls:
+        location["sources"]["items"]["properties"]["url"]["enum"] = urls
+        cost["source"]["properties"]["url"]["enum"] = urls
+    else:
+        location["sources"]["maxItems"] = 0
+        cost.pop("source", None)
+    if official:
+        requirement["sources"]["items"]["properties"]["url"]["enum"] = official
+    else:
+        requirement["sources"]["maxItems"] = 0
+        requirement["status"]["enum"] = ["unresolved"]
+        requirement["attachments"]["maxItems"] = 0
+        requirement.pop("formUrl", None)
     return shape

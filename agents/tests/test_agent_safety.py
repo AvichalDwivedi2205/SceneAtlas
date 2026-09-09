@@ -106,12 +106,13 @@ def test_scene_generation_retains_card_text_limits():
 
 
 def test_specialist_request_does_not_inherit_earlier_batch_drafts():
+    from types import SimpleNamespace
     from google.adk.models.llm_request import LlmRequest
     from google.genai import types
     from sceneatlas.agent import isolate_model_input
     request = LlmRequest(contents=[types.Content(role="model", parts=[types.Part(text="EARLIER_BATCH_DRAFT")])],
         config=types.GenerateContentConfig(system_instruction="Authoritative current batch and validation feedback"))
-    isolate_model_input(None, request)
+    isolate_model_input(SimpleNamespace(state={}), request)
     assert "EARLIER_BATCH_DRAFT" not in request.model_dump_json()
     assert request.config.system_instruction == "Authoritative current batch and validation feedback"
     assert len(request.contents) == 1 and request.contents[0].role == "user"

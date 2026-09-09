@@ -51,11 +51,7 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [sceneScope, setSceneScope] = useState<
     NonNullable<PlanData["sceneScope"]>
-  >(
-    initial?.sceneScope?.mode === "selected"
-      ? initial.sceneScope
-      : { mode: "selected", sceneIds: [] },
-  );
+  >(initial?.sceneScope ?? { mode: "selected", sceneIds: [] });
   const working = snapshot.runs.some(
     (r) => ["ingest", "scenes"].includes(r.kind) && isPending(r),
   );
@@ -106,7 +102,7 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
         <span className="eyebrow">ONE SCREENPLAY · YOUR SELECTED PLANS</span>
         <h2>
           {scenes.length
-            ? "Choose scenes. Start your plans."
+            ? "Add details for your selected shoot"
             : "Set up your selected plans"}
         </h2>
         <p>
@@ -121,6 +117,15 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
         </p>
       )}
       <fieldset disabled={!editable || working} className="variant-fields">
+        <div className="variant-scope-summary">
+          <strong>
+            {scopeIds.length} selected scenes · Location costs only
+          </strong>
+          <p>
+            Each cap covers these scenes together. Cast, crew, equipment and
+            post-production are separate.
+          </p>
+        </div>
         <div className="variant-options">
           {plans.map(
             (plan) =>
@@ -130,9 +135,9 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
                   <h3>{plan.data.name}</h3>
                   {plan.data.budgetMode === "fixed" ? (
                     <label>
-                      Budget cap (USD)
+                      Location budget cap (USD)
                       <input
-                        aria-label={`${plan.data.name} budget cap (USD)`}
+                        aria-label={`${plan.data.name} location budget cap (USD)`}
                         type="number"
                         min="0.01"
                         step="0.01"
@@ -282,13 +287,22 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
         </section>
         {scenes.length > 0 && initial && (
           <section>
-            <PlanScenePicker
-              plan={{ ...initial, sceneScope }}
-              onChange={setSceneScope}
-            />
+            <details>
+              <summary>
+                Review or change the {scopeIds.length} included scenes
+              </summary>
+              <PlanScenePicker
+                plan={{ ...initial, sceneScope }}
+                onChange={setSceneScope}
+              />
+              <p>
+                Changing scenes keeps each cap unchanged. Review the location
+                budgets above for the new scope.
+              </p>
+            </details>
             <p>
-              Same selected scenes in all selected plans. All {scenes.length}{" "}
-              screenplay scenes remain available.
+              These plans are alternatives for the same {scopeIds.length}-scene
+              shoot.
             </p>
             <label>
               Shooting time per selected scene (minutes)
@@ -372,7 +386,7 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
           }}
         >
           {scenes.length
-            ? `Start ${plans.length} ${plans.length === 1 ? "plan" : "plans"}`
+            ? `Research locations for ${plans.length} ${plans.length === 1 ? "plan" : "plans"}`
             : "Save variants & break down screenplay"}
           <ArrowRight size={16} />
         </AsyncButton>

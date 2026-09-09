@@ -106,8 +106,8 @@ const OverviewCard = memo(function OverviewCard({
           <div>
             <span className={styles.eyebrow}>
               {planState.budgetMode === "fixed"
-                ? "Budget plan"
-                : "No fixed budget"}
+                ? "Location budget plan"
+                : "Uncapped location plan"}
             </span>
             <h3 title={planState.name}>{planState.name}</h3>
           </div>
@@ -203,7 +203,7 @@ const OverviewCard = memo(function OverviewCard({
           <span className={styles.eyebrow}>For filmmakers &amp; producers</span>
           <h2>Start with your screenplay.</h2>
           <p className={styles.welcomeCopy}>
-            Choose your shoot plans. Bring locations, sources, and a shooting
+            Choose scenes, then compare location plans. Bring sources and a shooting
             schedule into one workspace.
           </p>
           {(busy || data.scriptStatus.tone === "attention") && (
@@ -300,13 +300,13 @@ function OverviewCanvas(props: ProductionOverviewProps) {
   const setupStage = overviewSetupStage(snapshot);
   const setupWrites = !plans.length || setupStage !== "work";
   const setupLabel = !plans.length
-    ? "Choose plans"
+    ? "Choose scenes & plans"
     : setupStage === "work"
       ? plans.length
         ? "Open plans"
         : "Review selected scenes"
       : setupStage === "scenes"
-        ? "Choose scenes & start plans"
+        ? "Add production details"
         : "Set up selected plans";
   const setupAction = !plans.length
     ? (props.onAddPlans ?? props.onSetup)

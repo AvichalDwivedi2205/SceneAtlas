@@ -174,3 +174,20 @@
   gap: 14px;
   align-content: start;
 }
+
+.variant-scope-summary {
+  padding: 14px 16px;
+  border: 1px solid var(--line, #c9c7b8);
+  border-radius: 10px;
+  background: var(--panel-2, #20261b);
+  margin: 12px 0;
+}
+.variant-scope-summary strong {
+  display: inline-block;
+  margin-right: 16px;
+}
+.variant-scope-summary p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}

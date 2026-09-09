@@ -271,7 +271,7 @@ def build_packet(task: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
     plan_rows = [
         [Paragraph("Included scenes", tiny), Paragraph(f"{scope_label} · {len(manifest['scenes'])} included<br/>Scene numbers: {_clean(scene_numbers)}", body)],
         [Paragraph("Priority", tiny), Paragraph(_clean(plan["priority"]), body)],
-        [Paragraph("Budget", tiny), Paragraph("No fixed cap" if plan["budgetMode"] == "uncapped" else _money(plan.get("budgetMinor"), plan["currency"]), body)],
+        [Paragraph("Location budget cap", tiny), Paragraph("No fixed cap" if plan["budgetMode"] == "uncapped" else _money(plan.get("budgetMinor"), plan["currency"]), body)],
         [Paragraph("Dates / timezone", tiny), Paragraph(_clean(", ".join(plan.get("dates", [])) or "Unconfirmed") + "<br/>" + _clean(plan.get("timezone", "Unconfirmed")), body)],
         [Paragraph("Shooting hours", tiny), Paragraph(f"{time_label(plan.get('dayStart', 480))} - {time_label(plan.get('dayEnd', 1080))}", body)],
         [Paragraph("Setup / moves", tiny), Paragraph(f"Setup: {_clean(plan.get('setupMinutes'))} min · Location move: {_clean(plan.get('moveMinutes'))} min<br/>Basis: {_clean(plan.get('timingBasis', 'unknown'))}", body)],
@@ -309,7 +309,7 @@ def build_packet(task: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
         story.append(Paragraph("No proposed shooting order has been prepared.", warn))
 
     story.append(Paragraph("Cost picture", h1))
-    story.append(Paragraph("Known amounts and estimates are shown separately. Missing fee evidence remains unquoted; a zero total does not establish that filming is free or within budget.", tiny))
+    story.append(Paragraph("Location costs cover the included scenes together; cast, crew, equipment and post-production are separate. Known amounts and estimates are shown separately. Missing fee evidence remains unquoted; a zero total does not establish that filming is free or within budget.", tiny))
     currency = manifest["costs"]["currency"]
     story.append(Table([[Paragraph("Known / quoted", tiny), Paragraph(_money(manifest["costs"]["knownMinor"], currency), right), Paragraph("Estimated additions", tiny), Paragraph(_money(manifest["costs"]["estimatedMinor"], currency), right)]], colWidths=[1.45*inch,1.45*inch,1.7*inch,1.45*inch], style=TableStyle([("GRID",(0,0),(-1,-1),.4,LINE),("BACKGROUND",(0,0),(-1,-1),PALE),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)])))
     cost_rows = [[Paragraph("Item", table_header), Paragraph("Rate × quantity", table_header), Paragraph("Total", table_header), Paragraph("Basis / coverage", table_header)]]

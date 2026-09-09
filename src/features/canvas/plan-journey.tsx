@@ -95,9 +95,9 @@ export function PlanJourney({
               {ready.sceneIds.length} selected scenes ·{" "}
               {plan.data.budgetMode === "fixed"
                 ? plan.data.budgetMinor === null
-                  ? "Set a budget cap"
-                  : `${formatMoney(plan.data.budgetMinor, plan.data.currency)} budget cap`
-                : "No fixed budget cap"}
+                  ? "Set a location budget cap"
+                  : `${formatMoney(plan.data.budgetMinor, plan.data.currency)} location cap`
+                : "No fixed location cap"}
             </p>
           </div>
           <button

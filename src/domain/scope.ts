@@ -35,7 +35,7 @@ export function isCurrentLocationEvidence(
 
 /** Membership is independent of canvas visibility and never grants board access. */
 export function effectivePlanSceneIds(
-  plan: PlanData,
+  plan: Pick<PlanData, "sceneScope">,
   scenes: readonly Pick<Record, "_id" | "data">[],
 ): string[] {
   const available = scenes.filter((e) => e.data.kind === "scene");

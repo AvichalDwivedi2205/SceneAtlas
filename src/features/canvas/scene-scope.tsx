@@ -9,7 +9,7 @@ export function PlanScenePicker({
   plan,
   onChange,
 }: {
-  plan: PlanData;
+  plan: Pick<PlanData, "sceneScope">;
   onChange: (scope: NonNullable<PlanData["sceneScope"]>) => void;
 }) {
   const { snapshot } = useBoard();

@@ -7,6 +7,7 @@ import type {
   Scope,
   TaskKind,
   ScheduleData,
+  PlanData,
 } from "../../domain/model";
 export type Move = {
   nodeId: string;
@@ -36,6 +37,7 @@ export type BoardActions = {
       name: string;
       budgetMode: "fixed" | "uncapped";
       budgetMinor: number | null;
+      sceneScope?: NonNullable<PlanData["sceneScope"]>;
     }[],
   ) => Promise<string[]>;
   configureVariants?: (input: VariantSetupInput) => Promise<void>;

@@ -30,7 +30,16 @@ test("producer chooses three budget branches, then adds an optional uncapped bra
     await expect(page.getByTestId("overview-plan-card")).toHaveCount(0);
     await page
       .getByTestId("overview-screenplay-card")
-      .getByRole("button", { name: "Choose plans", exact: true })
+      .getByRole("button", { name: "Choose scenes & plans", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Add budget plan", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByLabel("Plan scene scope", { exact: true })
+      .selectOption("all");
+    await page
+      .getByRole("button", { name: "Continue with 3 scenes", exact: true })
       .click();
     await expect(
       page.getByText("No new plans selected.", { exact: false }),
@@ -52,7 +61,9 @@ test("producer chooses three budget branches, then adds an optional uncapped bra
         .getByRole("button", { name: "Add budget plan", exact: true })
         .click();
       await page
-        .getByRole("spinbutton", { name: `Plan ${index + 1} budget cap (USD)` })
+        .getByRole("spinbutton", {
+          name: `Plan ${index + 1} location budget cap (USD)`,
+        })
         .fill(budget);
     }
     await expect(page.getByTestId("overview-plan-card")).toHaveCount(0);
@@ -70,6 +81,13 @@ test("producer chooses three budget branches, then adds an optional uncapped bra
       (await page.getByTestId("created-plans").textContent()) ?? "null",
     );
     expect(
+      saved.every(
+        (p: { sceneScope: unknown }) =>
+          JSON.stringify(p.sceneScope) ===
+          JSON.stringify({ mode: "all", sceneIds: [] }),
+      ),
+    ).toBe(true);
+    expect(
       saved.map((p: { budgetMode: string; budgetMinor: number }) => [
         p.budgetMode,
         p.budgetMinor,
@@ -83,13 +101,19 @@ test("producer chooses three budget branches, then adds an optional uncapped bra
       .getByRole("button", { name: "Open production setup", exact: true })
       .click();
     await expect(
-      page.getByRole("spinbutton", { name: "Budget $2,500 budget cap (USD)" }),
+      page.getByRole("spinbutton", {
+        name: "Budget $2,500 location budget cap (USD)",
+      }),
     ).toHaveValue("2500");
     await expect(
-      page.getByRole("spinbutton", { name: "Budget $5,000 budget cap (USD)" }),
+      page.getByRole("spinbutton", {
+        name: "Budget $5,000 location budget cap (USD)",
+      }),
     ).toHaveValue("5000");
     await expect(
-      page.getByRole("spinbutton", { name: "Budget $10,000 budget cap (USD)" }),
+      page.getByRole("spinbutton", {
+        name: "Budget $10,000 location budget cap (USD)",
+      }),
     ).toHaveValue("10000");
     await page
       .getByRole("textbox", { name: "Creative priorities" })
@@ -106,9 +130,13 @@ test("producer chooses three budget branches, then adds an optional uncapped bra
     await page
       .getByRole("combobox", { name: "Shared timing basis", exact: true })
       .selectOption("estimate");
+    await page.getByLabel("Shared scene duration", { exact: true }).fill("45");
+    await page
+      .getByLabel("Confirm shared scene windows", { exact: true })
+      .check();
     await page
       .getByRole("button", {
-        name: "Save variants & break down screenplay",
+        name: "Research locations for 3 plans",
         exact: true,
       })
       .click();
@@ -128,6 +156,12 @@ test("producer chooses three budget branches, then adds an optional uncapped bra
       configured.plans.map((p: { budgetMinor: number }) => p.budgetMinor),
     ).toEqual([250000, 500000, 1000000]);
     await page.getByRole("button", { name: "Add plans", exact: true }).click();
+    await page
+      .getByLabel("Plan scene scope", { exact: true })
+      .selectOption("all");
+    await page
+      .getByRole("button", { name: "Continue with 3 scenes", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "Add no fixed budget plan", exact: true })
       .click();

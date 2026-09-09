@@ -28,6 +28,12 @@ export const createPlans = mutation({
         name: v.string(),
         budgetMode: v.union(v.literal("fixed"), v.literal("uncapped")),
         budgetMinor: v.union(v.number(), v.null()),
+        sceneScope: v.optional(
+          v.object({
+            mode: v.union(v.literal("all"), v.literal("selected")),
+            sceneIds: v.array(v.string()),
+          }),
+        ),
       }),
     ),
   },
@@ -69,6 +75,7 @@ export const createPlans = mutation({
         budgetMinor: input.budgetMinor,
         currency: "USD",
         priority: input.budgetMode === "fixed" ? "cost" : "creative",
+        ...(input.sceneScope ? { sceneScope: input.sceneScope } : {}),
       });
       if (data.kind !== "plan") throw new ConvexError("Choose plan records.");
       const logicalKey = `plan:user:${input.key}`;
@@ -78,13 +85,28 @@ export const createPlans = mutation({
         (existing.kind !== "plan" ||
           existing.data.name !== data.name ||
           existing.data.budgetMode !== input.budgetMode ||
-          existing.data.budgetMinor !== input.budgetMinor)
+          existing.data.budgetMinor !== input.budgetMinor ||
+          (input.sceneScope &&
+            JSON.stringify(existing.data.sceneScope) !==
+              JSON.stringify(data.sceneScope)))
       )
         throw new ConvexError(
           "This plan request was already saved with different settings. Reopen plan selection.",
         );
       return { data, logicalKey, existing };
     });
+    for (const item of prepared) {
+      if (item.data.kind !== "plan")
+        throw new ConvexError("Choose plan records.");
+      await validatePlanScenes(ctx, args.boardId, item.data);
+      if (
+        item.data.sceneScope?.mode === "selected" &&
+        !item.data.sceneScope.sceneIds.length
+      )
+        throw new ConvexError(
+          "Choose at least one scene before creating a plan.",
+        );
+    }
     const ids: Id<"entities">[] = [];
     for (const [index, item] of prepared.entries()) {
       if (item.existing) {

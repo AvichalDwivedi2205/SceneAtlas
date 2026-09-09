@@ -147,7 +147,7 @@ describe("production overview derives plan progress from saved scope", () => {
         "Shared research for an included scene",
       );
     }
-    expect(overviewPlanState(alternate, snapshot).budget).toBe("No fixed cap");
+    expect(overviewPlanState(alternate, snapshot).budget).toBe("No fixed location cap");
   });
 
   it("keeps explicitly empty scope empty while research runs elsewhere", () => {

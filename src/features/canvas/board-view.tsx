@@ -1241,7 +1241,7 @@ function BoardInterior({
                     : modal === "search"
                       ? "Find a card"
                       : modal === "plans"
-                        ? "Choose plan branches"
+                        ? "Choose scenes and plan options"
                         : modal === "setup"
                           ? "Configure selected plans"
                           : modal === "scenes"

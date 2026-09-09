@@ -406,10 +406,10 @@ export const ProductionCard = memo(function ProductionCard({
             <>
               <div className="plan-budget">
                 {d.budgetMode === "uncapped"
-                  ? "No fixed cap"
+                  ? "No fixed location cap"
                   : d.budgetMinor
-                    ? formatMoney(d.budgetMinor, d.currency)
-                    : "Set your budget"}
+                    ? `${formatMoney(d.budgetMinor, d.currency)} location cap`
+                    : "Set location budget"}
               </div>
               <p>
                 {d.idealShoot ||
@@ -570,8 +570,9 @@ export function PlanTotals({ planId }: { planId: string }) {
   );
   return (
     <>
+      <p className="small muted">Location costs for {selected.sceneIds.length} included scenes. Cast, crew, equipment and post-production are separate.</p>
       <div className="node-row">
-        <span>Known costs</span>
+        <span>Known location costs</span>
         <strong>{formatMoney(s.known, p.data.currency)}</strong>
       </div>
       <div className="node-row">
@@ -588,11 +589,11 @@ export function PlanTotals({ planId }: { planId: string }) {
         {!ids.size
           ? "Choose locations to compare costs."
           : p.data.budgetMode === "fixed" && p.data.budgetMinor === null
-            ? "Set the whole-plan budget before checking compliance."
+            ? "Set the location cap for these scenes before checking costs."
             : s.budgetStatus === "over"
-              ? "Partial total exceeds this budget."
+              ? "Partial location total exceeds this cap."
               : s.budgetStatus === "unconfirmed"
-                ? "Budget compliance unconfirmed."
+                ? "Location budget unconfirmed. Missing quotes are not zero-cost items."
                 : s.budgetStatus === "estimated_within"
                   ? "Estimated total is within cap; verification remains."
                   : "Costs reflect selected locations and available evidence."}

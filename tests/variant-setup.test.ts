@@ -200,6 +200,83 @@ async function evidence(
 }
 
 describe("initial variant setup", () => {
+  it("creates alternatives with their selected scenes and rejects foreign or empty scope atomically", async () => {
+    const f = await fixture(3, false, []);
+    const plan = {
+      key: "scope-plan",
+      name: "Three-scene locations",
+      budgetMode: "fixed" as const,
+      budgetMinor: 250000,
+      sceneScope: {
+        mode: "selected" as const,
+        sceneIds: f.sceneIds.slice(0, 2),
+      },
+    };
+    const [id] = await f.owner.mutation(api.variantSetup.createPlans, {
+      boardId: f.boardId,
+      plans: [plan],
+    });
+    const saved = (await f.snapshot()).entities.find((e) => e._id === id)!;
+    expect(saved.data.sceneScope).toEqual(plan.sceneScope);
+    expect(saved.data.budgetMinor).toBe(250000);
+    await expect(
+      f.owner.mutation(api.variantSetup.createPlans, {
+        boardId: f.boardId,
+        plans: [
+          {
+            ...plan,
+            key: "empty",
+            sceneScope: { mode: "selected", sceneIds: [] },
+          },
+        ],
+      }),
+    ).rejects.toThrow("at least one scene");
+    const otherBoard = await f.owner.mutation(api.boards.create, {
+      name: "Other screenplay",
+    });
+    const foreignSceneId = await f.t.run((ctx) =>
+      putEntity(ctx, {
+        boardId: otherBoard,
+        actor: f.userId,
+        logicalKey: "foreign-scene",
+        scope: { kind: "workspace" },
+        data: entitySchema.parse({
+          kind: "scene",
+          number: 1,
+          heading: "EXT. OTHER - DAY",
+          excerpt: "Other scene",
+          pageStart: 1,
+          pageEnd: 1,
+          setting: "Other",
+          interiorExterior: "EXT",
+          timeOfDay: "DAY",
+          needs: [],
+        }),
+      }),
+    );
+    await expect(
+      f.owner.mutation(api.variantSetup.createPlans, {
+        boardId: f.boardId,
+        plans: [
+          { ...plan, key: "valid-new" },
+          {
+            ...plan,
+            key: "foreign",
+            sceneScope: { mode: "selected", sceneIds: [foreignSceneId] },
+          },
+        ],
+      }),
+    ).rejects.toThrow("workspace");
+    expect(
+      (await f.snapshot()).entities.filter((e) => e.kind === "plan"),
+    ).toHaveLength(1);
+    await expect(
+      f.owner.mutation(api.variantSetup.createPlans, {
+        boardId: f.boardId,
+        plans: [{ ...plan, sceneScope: { mode: "all", sceneIds: [] } }],
+      }),
+    ).rejects.toThrow("different settings");
+  });
   it.each([
     ["fixed"],
     ["uncapped"],

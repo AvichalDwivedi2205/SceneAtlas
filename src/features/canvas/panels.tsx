@@ -605,7 +605,7 @@ export function EditForm({
             onChange={(sceneScope) => patch({ sceneScope })}
           />
           <label>
-            Budget mode
+            Location budget mode
             <select
               value={draft.budgetMode}
               onChange={(e) =>
@@ -616,13 +616,13 @@ export function EditForm({
                 })
               }
             >
-              <option value="fixed">Fixed budget for whole plan</option>
+              <option value="fixed">Location cap for included scenes</option>
               <option value="uncapped">No fixed cap</option>
             </select>
           </label>
           {draft.budgetMode === "fixed" &&
             input(
-              "Whole-plan budget",
+              "Location budget cap (USD)",
               draft.budgetMinor === null ? "" : draft.budgetMinor / 100,
               (v) =>
                 patch({ budgetMinor: v ? Math.round(Number(v) * 100) : null }),

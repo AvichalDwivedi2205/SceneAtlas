@@ -114,10 +114,10 @@ export function overviewPlanState(plan: Entity, snapshot: BoardSnapshot) {
     budgetMode: plan.data.budgetMode,
     budget:
       plan.data.budgetMode === "uncapped"
-        ? "No fixed cap"
+        ? "No fixed location cap"
         : plan.data.budgetMinor === null
-          ? "Budget cap not set"
-          : `${formatMoney(plan.data.budgetMinor, plan.data.currency)} cap`,
+          ? "Location cap not set"
+          : `${formatMoney(plan.data.budgetMinor, plan.data.currency)} location cap`,
     sceneCount: ready.sceneIds.length,
     chosenCount,
     currentSchedule,
@@ -168,7 +168,7 @@ export function screenplayStatus(
         entity.data.blocks.includes("scenes"),
     )
   )
-    return { label: "Shared production details needed", tone: "attention" };
+    return { label: "Choose the scenes for your shoot", tone: "attention" };
   if (
     sceneCount > 0 &&
     script?.data.kind === "script" &&

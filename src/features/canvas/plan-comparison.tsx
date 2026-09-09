@@ -103,7 +103,7 @@ export function PlanComparison() {
             {ready
               .map(
                 (r) =>
-                  `${r.plan.data.kind === "plan" ? r.plan.data.name : "Plan"}: ${formatMoney(r.ready.costs.partial, r.plan.data.kind === "plan" ? r.plan.data.currency : "USD")} in known and estimated costs, ${r.ready.proposed.moves} moves`,
+                  `${r.plan.data.kind === "plan" ? r.plan.data.name : "Plan"}: ${formatMoney(r.ready.costs.partial, r.plan.data.kind === "plan" ? r.plan.data.currency : "USD")} in known and estimated location costs, ${r.ready.proposed.moves} moves`,
               )
               .join("; ")}
             . Unquoted fees remain outside these totals.
@@ -124,9 +124,9 @@ export function PlanComparison() {
                 <span className="badge">
                   {p.data.budgetMode === "fixed"
                     ? p.data.budgetMinor === null
-                      ? "Budget cap needed"
-                      : `Cap ${formatMoney(p.data.budgetMinor, p.data.currency)}`
-                    : "No fixed cap"}
+                      ? "Location cap needed"
+                      : `Location cap ${formatMoney(p.data.budgetMinor, p.data.currency)}`
+                    : "No fixed location cap"}
                 </span>
                 <button
                   className="button tiny quiet"
@@ -190,7 +190,7 @@ export function PlanComparison() {
               </p>
               <PlanTotals planId={p._id} />
               <details>
-                <summary>Confirmed locations ({r.locations.length})</summary>
+                <summary>Chosen locations ({r.locations.length})</summary>
                 {r.choices.map((c) => (
                   <p key={c.sceneId}>
                     {r.scenes.find((s) => s._id === c.sceneId)?.data.kind ===

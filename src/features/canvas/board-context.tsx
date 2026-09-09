@@ -14,7 +14,25 @@ export type Move = {
   y: number;
   expectedRevision: number;
 };
+export type VariantSetupInput = {
+  plans: { planId: string; expectedRevision: number }[];
+  budgetMinor: number;
+  idealShoot: string;
+  dates: string[];
+  timezone: string;
+  dayStart: number;
+  dayEnd: number;
+  moveMinutes: number | null;
+  setupMinutes: number | null;
+  timingBasis: "confirmed" | "estimate" | "unknown";
+  sceneIds?: string[];
+  durationMinutes?: number;
+  applyTimeWindows?: boolean;
+  answers?: { entityId: string; expectedRevision: number; answer: string }[];
+};
 export type BoardActions = {
+  configureVariants?: (input: VariantSetupInput) => Promise<void>;
+  startVariantResearch?: (planIds: string[]) => Promise<void>;
   startPlans?: (planIds: string[]) => Promise<void>;
   upload: (file: File) => Promise<void>;
   start: (

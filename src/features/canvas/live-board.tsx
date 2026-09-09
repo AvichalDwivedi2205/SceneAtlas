@@ -33,6 +33,8 @@ export function LiveBoard({
     move = useMutation(api.boards.move),
     choose = useMutation(api.planning.select),
     startPlans = useMutation(api.planning.startReadyPlans),
+    configureVariants = useMutation(api.variantSetup.configure),
+    startVariantResearch = useMutation(api.variantSetup.startResearch),
     note = useMutation(api.boards.addNote);
   const requestUpload = useMutation(api.assets.requestUpload),
     finish = useMutation(api.assets.finishUpload),
@@ -119,6 +121,27 @@ export function LiveBoard({
   const actions: BoardActions = useMemo(
     () => ({
       upload,
+      configureVariants: async (input) => {
+        await configureVariants({
+          ...input,
+          boardId: id,
+          plans: input.plans.map((p) => ({
+            ...p,
+            planId: p.planId as Id<"entities">,
+          })),
+          sceneIds: input.sceneIds as Id<"entities">[] | undefined,
+          answers: input.answers?.map((a) => ({
+            ...a,
+            entityId: a.entityId as Id<"entities">,
+          })),
+        });
+      },
+      startVariantResearch: async (planIds) => {
+        await startVariantResearch({
+          boardId: id,
+          planIds: planIds as Id<"entities">[],
+        });
+      },
       startPlans: async (planIds: string[]) => {
         const outcomes = await startPlans({
           boardId: id,
@@ -199,6 +222,8 @@ export function LiveBoard({
       move,
       choose,
       startPlans,
+      configureVariants,
+      startVariantResearch,
       note,
       cancel,
       retry,

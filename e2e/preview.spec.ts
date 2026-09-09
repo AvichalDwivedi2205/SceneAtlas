@@ -7,7 +7,17 @@ test("sample board supports navigation and evidence inspection", async ({
   await expect(
     page.getByText("Example board. Explore cards and views"),
   ).toBeVisible();
-  await expect(page.locator(".react-flow__node")).toHaveCount(12);
+  await expect(page.getByTestId("overview-screenplay-card")).toBeVisible();
+  await expect(page.getByTestId("overview-plan-card")).toHaveCount(2);
+  // Real pointer clicks catch canvas overlays that accidentally swallow actions.
+  await page
+    .getByRole("button", { name: "Open plan: Budget plan", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Budget plan workflow" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to plan tree" }).click();
+  await expect(page.getByTestId("overview-screenplay-card")).toBeVisible();
   await page.getByRole("button", { name: "Find a card" }).click();
   await page
     .getByRole("button", { name: /location Leo Carrillo State Park/ })
@@ -53,7 +63,9 @@ test("schedule and packet explain incomplete production state", async ({
     page.getByRole("heading", { name: /shooting schedule/ }),
   ).toBeVisible();
   await expect(page.getByText("Scene 2 duration still unknown.")).toBeVisible();
-  await page.getByRole("button", { name: "Preparation packet", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Preparation packet", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Production preparation packet" }),
   ).toBeVisible();

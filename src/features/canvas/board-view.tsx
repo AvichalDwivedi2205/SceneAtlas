@@ -1,4 +1,7 @@
 "use client";
+import { ProductionOverview } from "./production-overview";
+import { VariantSetup } from "./variant-setup";
+import { PlanJourney } from "./plan-journey";
 import { WorkflowGuide } from "./workflow-guide";
 import { SceneNavigator } from "./scene-scope";
 import { effectivePlanSceneIds } from "../../domain/scope";
@@ -121,7 +124,12 @@ function BoardInterior({
   connected = true,
 }: Props) {
   const flow = useReactFlow<CardNode>();
-  const [view, setView] = useState(initialView);
+  const [view, setView] = useState<"canvas" | "plan" | "schedule" | "packet">(
+    initialView,
+  );
+  const [canvasMode, setCanvasMode] = useState<"overview" | "cards">(
+    "overview",
+  );
   const planStorageKey = `sceneatlas:active-plan:${snapshot.board._id}:${snapshot.me._id}`;
   const activePlanId = useSyncExternalStore(
     subscribeActivePlan,
@@ -137,13 +145,14 @@ function BoardInterior({
   );
   const [nodes, setNodes] = useState<CardNode[]>([]);
   const [selectedIds, setSelected] = useState<string[]>([]);
+  const [pendingFocus, setPendingFocus] = useState<string | null>(null);
   const dragging = useRef(new Set<string>());
   const [drawer, setDrawer] = useState<{
     kind: "inspect" | "edit";
     id: string;
   } | null>(null);
   const [modal, setModal] = useState<
-    "share" | "upload" | "note" | "search" | "scenes" | null
+    "share" | "upload" | "note" | "search" | "scenes" | "setup" | null
   >(null);
   const [panel, setPanel] = useState<"chat" | "changes" | "activity" | null>(
     null,
@@ -271,20 +280,33 @@ function BoardInterior({
       })),
     [snapshot.edges],
   );
-  const focus = useCallback(
-    (id: string) => {
-      setView("canvas");
-      setSelected([id]);
-      const node = flow.getNode(id);
-      if (node)
-        void flow.setCenter(
-          node.position.x + (node.measured?.width ?? 330) / 2,
-          node.position.y + (node.measured?.height ?? 240) / 2,
-          { duration: 450, zoom: 0.9 },
-        );
-    },
-    [flow],
-  );
+  const focus = useCallback((id: string) => {
+    setView("canvas");
+    setCanvasMode("cards");
+    setSelected([id]);
+    setPendingFocus(id);
+  }, []);
+  useEffect(() => {
+    if (!pendingFocus || view !== "canvas" || canvasMode !== "cards") return;
+    // Let the previously hidden canvas measure its viewport before centering.
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        const node = flow.getNode(pendingFocus);
+        if (node)
+          void flow.setCenter(
+            node.position.x + (node.measured?.width ?? 340) / 2,
+            node.position.y + (node.measured?.height ?? 240) / 2,
+            { duration: 450, zoom: 0.9 },
+          );
+        setPendingFocus(null);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [flow, pendingFocus, view, canvasMode]);
   const inspect = useCallback(
     (e: Entity) => setDrawer({ kind: "inspect", id: e._id }),
     [],
@@ -476,24 +498,27 @@ function BoardInterior({
             </button>
           </div>
         </header>
-        <WorkflowGuide
-          onStage={(stage) => {
-            if (stage === "screenplay") {
-              const script = snapshot.entities.find(
-                (e) => e.data.kind === "script",
-              );
-              if (script) focus(script._id);
-              else setModal("upload");
-            } else if (stage === "scenes" || stage === "locations")
-              setModal("scenes");
-            else setView(stage);
-          }}
-        />
+        {((view !== "canvas" && view !== "plan") ||
+          (view === "canvas" && canvasMode === "cards")) && (
+          <WorkflowGuide
+            onStage={(stage) => {
+              if (stage === "screenplay") {
+                const script = snapshot.entities.find(
+                  (e) => e.data.kind === "script",
+                );
+                if (script) focus(script._id);
+                else setModal("upload");
+              } else if (stage === "scenes" || stage === "locations")
+                setModal("scenes");
+              else setView(stage);
+            }}
+          />
+        )}
         <div className="board-subbar">
           <div className="view-tabs">
             {(
               [
-                { id: "canvas", label: "Canvas", icon: LayoutGrid },
+                { id: "canvas", label: "Infinite canvas", icon: LayoutGrid },
                 { id: "schedule", label: "Schedule", icon: Clock3 },
                 { id: "packet", label: "Preparation packet", icon: FileText },
               ] as const
@@ -501,13 +526,27 @@ function BoardInterior({
               <button
                 key={id}
                 className={view === id ? "active" : ""}
-                onClick={() => setView(id)}
+                onClick={() => {
+                  setView(id);
+                  if (id === "canvas") setCanvasMode("overview");
+                }}
               >
                 <Icon size={14} />
                 {label}
               </button>
             ))}
           </div>
+          {view === "canvas" && (
+            <button
+              className="button tiny quiet"
+              aria-pressed={canvasMode === "cards"}
+              onClick={() =>
+                setCanvasMode(canvasMode === "cards" ? "overview" : "cards")
+              }
+            >
+              {canvasMode === "cards" ? "Plan tree" : "All cards"}
+            </button>
+          )}
           <div className="board-plan-select">
             <GitBranch size={14} />
             <select
@@ -516,7 +555,7 @@ function BoardInterior({
               onChange={(e) => setPlan(e.target.value)}
             >
               {!plans.length && (
-                <option value="">Plans follow scene breakdown</option>
+                <option value="">Upload a screenplay to start</option>
               )}
               {plans.map((p) => (
                 <option key={p._id} value={p._id}>
@@ -598,7 +637,9 @@ function BoardInterior({
             <AsyncButton
               pendingLabel="Arranging…"
               className="rail-button"
-              disabled={!editable}
+              disabled={
+                !editable || view !== "canvas" || canvasMode !== "cards"
+              }
               title="Arrange unmoved cards"
               aria-label="Arrange unmoved cards"
               onClick={autoLayout}
@@ -609,6 +650,7 @@ function BoardInterior({
               className="rail-button"
               title="Fit board (F)"
               aria-label="Fit board"
+              disabled={view !== "canvas" || canvasMode !== "cards"}
               onClick={() =>
                 void flow.fitView({ padding: 0.15, duration: 400 })
               }
@@ -640,7 +682,7 @@ function BoardInterior({
             className="board-stage"
             aria-label={view === "canvas" ? "Infinite production canvas" : view}
             onMouseMove={(e) => {
-              if (view === "canvas")
+              if (view === "canvas" && canvasMode === "cards")
                 signal(
                   flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }),
                 );
@@ -650,7 +692,12 @@ function BoardInterior({
             <div
               className="flow-surface"
               data-node-count={nodes.length}
-              style={{ display: view === "canvas" ? "block" : "none" }}
+              style={{
+                display:
+                  view === "canvas" && canvasMode === "cards"
+                    ? "block"
+                    : "none",
+              }}
             >
               <ReactFlow<CardNode>
                 nodes={nodes}
@@ -847,6 +894,30 @@ function BoardInterior({
                 </nav>
               )}
             </div>
+            {view === "canvas" && canvasMode === "overview" && (
+              <ProductionOverview
+                uploadProgress={uploadProgress}
+                onUpload={() => setModal("upload")}
+                onSetup={() => setModal("setup")}
+                onScenes={() => setModal("scenes")}
+                onPlan={(id) => {
+                  setPlan(id);
+                  setView("plan");
+                }}
+              />
+            )}
+            {view === "plan" && (
+              <PlanJourney
+                key={effectivePlanId}
+                onBack={() => {
+                  setView("canvas");
+                  setCanvasMode("overview");
+                }}
+                onSetup={() => setModal("setup")}
+                onCompare={() => setView("schedule")}
+                onPacket={() => setView("packet")}
+              />
+            )}
             {view === "schedule" && <SchedulePanel />}
             {view === "packet" && <PacketPanel planId={effectivePlanId} />}
             {(error || notice) && (
@@ -1157,7 +1228,7 @@ function BoardInterior({
           <Dialog.Portal>
             <Dialog.Overlay className="modal-overlay" />
             <Dialog.Content
-              className="modal-content"
+              className={`modal-content ${modal === "setup" ? "variant-modal" : ""}`}
               aria-describedby={undefined}
             >
               <Dialog.Title>
@@ -1167,7 +1238,11 @@ function BoardInterior({
                     ? "Start with your screenplay"
                     : modal === "search"
                       ? "Find a card"
-                      : "Add a production note"}
+                      : modal === "setup"
+                        ? "Configure plan variants"
+                        : modal === "scenes"
+                          ? "Screenplay scenes"
+                          : "Add a production note"}
               </Dialog.Title>
               <Dialog.Close
                 className="modal-close icon-button"
@@ -1175,6 +1250,16 @@ function BoardInterior({
               >
                 <X size={18} />
               </Dialog.Close>
+              {modal === "setup" && (
+                <VariantSetup
+                  key={scenes.length ? "scenes" : "brief"}
+                  onDone={() => {
+                    setModal(null);
+                    setView("canvas");
+                    setCanvasMode("overview");
+                  }}
+                />
+              )}
               {modal === "share" &&
                 (previewMode ? (
                   <div className="chat-empty">

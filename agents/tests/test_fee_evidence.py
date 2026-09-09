@@ -89,3 +89,22 @@ def test_category_specific_rates_need_confirmed_eligibility_or_estimate_consent(
     assert cost['basis'] == ('estimate' if approved else 'unknown')
     assert cost['amountMinor'] == (10000 if approved else None)
     assert 'confirm' in cost['assumptions'].lower()
+
+
+@pytest.mark.parametrize('unit', ['hour', 'hourly', 'per hour', 'hr'])
+@pytest.mark.parametrize('approved', [False, True])
+def test_published_hourly_rate_is_not_a_confirmed_full_plan_quantity(unit, approved):
+    url = 'https://film.ca.gov/state-permits/state-parks-beaches/'
+    evidence = {'searchId': 'actual-search', 'retrievedAt': 100, 'results': [
+        {'url': url, 'title': 'State park filming', 'excerpt': 'Parking rate: $3 per hour. Confirm billable duration.'}]}
+    cost = {'id': 'parking', 'label': 'Hourly parking', 'unit': unit, 'quantity': 1,
+            'basis': 'published', 'amountMinor': 300, 'currency': 'USD', 'assumptions': '',
+            'coverageReason': 'One passenger car for 45-minute scene, 1-hour minimum parking fee.', 'source': {'url': url}}
+    normalized = normalize_sources({'locations': [{'costs': [cost]}]}, evidence,
+                                   allow_fee_estimates=approved)['locations'][0]['costs'][0]
+    assert normalized['basis'] == ('estimate' if approved else 'unknown')
+    assert normalized['amountMinor'] == (300 if approved else None)
+    assert 'complete plan remain unconfirmed' in normalized['coverageReason']
+    assert '45-minute' not in normalized['coverageReason']
+    assert '$3 per hour' in normalized['source']['excerpt']
+    assert normalized['source']['searchId'] == 'actual-search'

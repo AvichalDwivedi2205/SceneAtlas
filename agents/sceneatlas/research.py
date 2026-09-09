@@ -351,6 +351,13 @@ def normalize_sources(result: dict, evidence: dict, previous_location: dict | No
             classification_text = " ".join([cost.get("label", ""), explanation, (cost.get("source") or {}).get("excerpt", "")])
             if cost.get("basis") in {"published", "quote"} and mentions_shoot_classification(classification_text):
                 cost.update(basis="estimate", assumptions="The authority must confirm the applicable simple/complex shoot category; this amount is a provisional category-based estimate.")
+            if cost.get("basis") == "published" and re.search(r"\b(?:hours?|hourly|hrs?)\b", cost.get("unit", ""), re.I):
+                # A published hourly rate does not establish how many hours the
+                # whole plan will be billed. Scene durations can be estimates,
+                # and shared-location scope can grow after initial discovery.
+                cost.update(basis="estimate",
+                            coverageReason="Billable hours for the complete plan remain unconfirmed; confirm duration, minimums and rounding with the authority.",
+                            assumptions="The source establishes an hourly rate, not a confirmed plan quantity. This line is a provisional quantity-based estimate.")
             if cost.get("basis") == "estimate" and not allow_fee_estimates:
                 cost.update(basis="unknown", amountMinor=None,
                             assumptions="No producer approval for fee estimates. Confirm the applicable rate, quantity and fee category or obtain a quote before including an amount.")

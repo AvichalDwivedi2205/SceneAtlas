@@ -15,8 +15,7 @@ export type Move = {
   expectedRevision: number;
 };
 export type VariantSetupInput = {
-  plans: { planId: string; expectedRevision: number }[];
-  budgetMinor: number;
+  plans: { planId: string; expectedRevision: number; budgetMinor?: number }[];
   idealShoot: string;
   dates: string[];
   timezone: string;
@@ -31,6 +30,14 @@ export type VariantSetupInput = {
   answers?: { entityId: string; expectedRevision: number; answer: string }[];
 };
 export type BoardActions = {
+  createPlans?: (
+    plans: {
+      key: string;
+      name: string;
+      budgetMode: "fixed" | "uncapped";
+      budgetMinor: number | null;
+    }[],
+  ) => Promise<string[]>;
   configureVariants?: (input: VariantSetupInput) => Promise<void>;
   startVariantResearch?: (planIds: string[]) => Promise<void>;
   startPlans?: (planIds: string[]) => Promise<void>;

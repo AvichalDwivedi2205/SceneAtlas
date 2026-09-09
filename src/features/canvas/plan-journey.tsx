@@ -131,7 +131,7 @@ export function PlanJourney({
           <span className="eyebrow">NEXT STEP</span>
           <h2>
             {!ready.scenes.length
-              ? "Choose scenes for both plans"
+              ? "Choose shared scenes"
               : ready.choices.length < ready.scenes.length
                 ? "Review your filming locations"
                 : requirementTargets.length
@@ -140,11 +140,12 @@ export function PlanJourney({
                     ? "Compare your plans or prepare the handoff"
                     : ready.blockers.length
                       ? "Resolve the remaining production inputs"
-                      : "Generate both shooting schedules"}
+                      : "Choose schedules to generate"}
           </h2>
           <p>
             {ready.choices.length} of {ready.scenes.length} scenes have a
-            location selected. Shared evidence stays available in both variants.
+            location selected. Shared evidence stays available across your
+            plans.
           </p>
         </div>
         {!ready.scenes.length ? (

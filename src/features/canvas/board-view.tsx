@@ -1,6 +1,7 @@
 "use client";
 import { ProductionOverview } from "./production-overview";
 import { VariantSetup } from "./variant-setup";
+import { PlanSelection } from "./plan-selection";
 import { PlanJourney } from "./plan-journey";
 import { WorkflowGuide } from "./workflow-guide";
 import { SceneNavigator } from "./scene-scope";
@@ -152,7 +153,7 @@ function BoardInterior({
     id: string;
   } | null>(null);
   const [modal, setModal] = useState<
-    "share" | "upload" | "note" | "search" | "scenes" | "setup" | null
+    "share" | "upload" | "note" | "search" | "scenes" | "setup" | "plans" | null
   >(null);
   const [panel, setPanel] = useState<"chat" | "changes" | "activity" | null>(
     null,
@@ -896,6 +897,7 @@ function BoardInterior({
             </div>
             {view === "canvas" && canvasMode === "overview" && (
               <ProductionOverview
+                onAddPlans={() => setModal("plans")}
                 uploadProgress={uploadProgress}
                 onUpload={() => setModal("upload")}
                 onSetup={() => setModal("setup")}
@@ -1228,7 +1230,7 @@ function BoardInterior({
           <Dialog.Portal>
             <Dialog.Overlay className="modal-overlay" />
             <Dialog.Content
-              className={`modal-content ${modal === "setup" ? "variant-modal" : ""}`}
+              className={`modal-content ${modal === "setup" || modal === "plans" ? "variant-modal" : ""}`}
               aria-describedby={undefined}
             >
               <Dialog.Title>
@@ -1238,11 +1240,13 @@ function BoardInterior({
                     ? "Start with your screenplay"
                     : modal === "search"
                       ? "Find a card"
-                      : modal === "setup"
-                        ? "Configure plan variants"
-                        : modal === "scenes"
-                          ? "Screenplay scenes"
-                          : "Add a production note"}
+                      : modal === "plans"
+                        ? "Choose plan branches"
+                        : modal === "setup"
+                          ? "Configure selected plans"
+                          : modal === "scenes"
+                            ? "Screenplay scenes"
+                            : "Add a production note"}
               </Dialog.Title>
               <Dialog.Close
                 className="modal-close icon-button"
@@ -1250,6 +1254,15 @@ function BoardInterior({
               >
                 <X size={18} />
               </Dialog.Close>
+              {modal === "plans" && (
+                <PlanSelection
+                  onDone={() => {
+                    setModal(null);
+                    setView("canvas");
+                    setCanvasMode("overview");
+                  }}
+                />
+              )}
               {modal === "setup" && (
                 <VariantSetup
                   key={scenes.length ? "scenes" : "brief"}

@@ -13,14 +13,18 @@ import "./variant-setup.css";
 export function VariantSetup({ onDone }: { onDone: () => void }) {
   const { snapshot, actions, previewMode } = useBoard();
   const plans = snapshot.entities.filter((e) => e.data.kind === "plan");
-  const fixed = plans.find(
-    (e) => e.data.kind === "plan" && e.data.budgetMode === "fixed",
-  );
-  const initial = fixed?.data.kind === "plan" ? fixed.data : undefined;
+  const initial = plans[0]?.data.kind === "plan" ? plans[0].data : undefined;
   const scenes = snapshot.entities.filter((e) => e.data.kind === "scene");
   const script = snapshot.entities.find((e) => e.data.kind === "script");
-  const [budget, setBudget] = useState(
-    initial?.budgetMinor ? String(initial.budgetMinor / 100) : "",
+  const [budgets, setBudgets] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      plans.map((p) => [
+        p._id,
+        p.data.kind === "plan" && p.data.budgetMinor
+          ? String(p.data.budgetMinor / 100)
+          : "",
+      ]),
+    ),
   );
   const [ideal, setIdeal] = useState(initial?.idealShoot ?? "");
   const [date, setDate] = useState(initial?.dates[0] ?? "");
@@ -78,8 +82,14 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
   };
   const valid =
     !!initial &&
-    plans.length === 2 &&
-    Number(budget) > 0 &&
+    plans.length > 0 &&
+    plans.every(
+      (p) =>
+        p.data.kind === "plan" &&
+        (p.data.budgetMode === "uncapped" ||
+          (Math.round(Number(budgets[p._id]) * 100) > 0 &&
+            Number.isSafeInteger(Math.round(Number(budgets[p._id]) * 100)))),
+    ) &&
     !!ideal.trim() &&
     !!date &&
     Number.isFinite(minutes(start)) &&
@@ -93,14 +103,14 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
   return (
     <div className="variant-setup">
       <div className="variant-intro">
-        <span className="eyebrow">ONE SCREENPLAY · TWO POSSIBILITIES</span>
+        <span className="eyebrow">ONE SCREENPLAY · YOUR SELECTED PLANS</span>
         <h2>
           {scenes.length
-            ? "Choose scenes. Start both plans."
-            : "Set up your two plans"}
+            ? "Choose scenes. Start your plans."
+            : "Set up your selected plans"}
         </h2>
         <p>
-          One production brief, two budget approaches. Compare locations,
+          One production brief for the plans you chose. Compare locations,
           shooting schedules and preparation packets as each plan takes shape.
         </p>
       </div>
@@ -112,32 +122,40 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
       )}
       <fieldset disabled={!editable || working} className="variant-fields">
         <div className="variant-options">
-          <section>
-            <GitBranch size={18} />
-            <h3>Budget plan</h3>
-            <p>Prioritize cost within your fixed cap.</p>
-            <label>
-              Budget cap (USD)
-              <input
-                aria-label="Budget cap (USD)"
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="Enter your budget"
-                value={budget}
-                onChange={(e) => setBudget(e.target.value)}
-              />
-            </label>
-          </section>
-          <section>
-            <GitBranch size={18} />
-            <h3>No fixed budget</h3>
-            <p>Prioritize creative fit. Costs still tracked.</p>
-            <strong className="variant-uncapped">No fixed cap</strong>
-            <span className="small muted">
-              Unquoted costs remain visible in both plans.
-            </span>
-          </section>
+          {plans.map(
+            (plan) =>
+              plan.data.kind === "plan" && (
+                <section key={plan._id}>
+                  <GitBranch size={18} />
+                  <h3>{plan.data.name}</h3>
+                  {plan.data.budgetMode === "fixed" ? (
+                    <label>
+                      Budget cap (USD)
+                      <input
+                        aria-label={`${plan.data.name} budget cap (USD)`}
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={budgets[plan._id] ?? ""}
+                        onChange={(event) =>
+                          setBudgets({
+                            ...budgets,
+                            [plan._id]: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  ) : (
+                    <>
+                      <strong className="variant-uncapped">No fixed cap</strong>
+                      <span className="small muted">
+                        Costs and unquoted fees remain visible.
+                      </span>
+                    </>
+                  )}
+                </section>
+              ),
+          )}
         </div>
         <label>
           Creative priorities
@@ -152,7 +170,7 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
         {questions.length > 0 && (
           <section className="variant-brief">
             <h3>Shared production brief</h3>
-            <p>These answers apply to both variants.</p>
+            <p>These answers apply to all selected plans.</p>
             {questions.map(
               (q) =>
                 q.data.kind === "question" && (
@@ -269,7 +287,7 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
               onChange={setSceneScope}
             />
             <p>
-              Same selected scenes in both variants. All {scenes.length}{" "}
+              Same selected scenes in all selected plans. All {scenes.length}{" "}
               screenplay scenes remain available.
             </p>
             <label>
@@ -300,8 +318,8 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
       <footer className="variant-footer">
         <p>
           {scenes.length
-            ? "Start shared location research for both plans. Review location choices before generating each shooting schedule."
-            : "Save both variants, then break down the complete screenplay. You’ll choose the shoot-day scenes next."}
+            ? "Start shared location research for your selected plans. Review location choices before generating each shooting schedule."
+            : "Save all selected plans, then break down the complete screenplay. You’ll choose the shoot-day scenes next."}
         </p>
         <AsyncButton
           className="button primary"
@@ -321,8 +339,10 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
               plans: plans.map((p) => ({
                 planId: p._id,
                 expectedRevision: p.revision,
+                ...(p.data.kind === "plan" && p.data.budgetMode === "fixed"
+                  ? { budgetMinor: Math.round(Number(budgets[p._id]) * 100) }
+                  : {}),
               })),
-              budgetMinor: Math.round(Number(budget) * 100),
               idealShoot: ideal,
               dates: [date],
               timezone,
@@ -352,7 +372,7 @@ export function VariantSetup({ onDone }: { onDone: () => void }) {
           }}
         >
           {scenes.length
-            ? "Start both plans"
+            ? `Start ${plans.length} ${plans.length === 1 ? "plan" : "plans"}`
             : "Save variants & break down screenplay"}
           <ArrowRight size={16} />
         </AsyncButton>

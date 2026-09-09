@@ -42,6 +42,7 @@ import styles from "./production-overview.module.css";
 export type ProductionOverviewProps = {
   onUpload: () => void;
   onSetup: () => void;
+  onAddPlans?: () => void;
   onPlan: (planId: string) => void;
   onScenes: () => void;
   uploadProgress: number | null;
@@ -187,13 +188,12 @@ const OverviewCard = memo(function OverviewCard({
           >
             All screenplay scenes <span>{data.sceneCount}</span>
           </button>
-          {data.planCount > 0 && (
-            <Handle
-              type="source"
-              position={Position.Bottom}
-              isConnectable={false}
-            />
-          )}
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            isConnectable={false}
+            style={{ opacity: data.planCount > 0 ? 1 : 0 }}
+          />
         </>
       ) : (
         <>
@@ -203,7 +203,7 @@ const OverviewCard = memo(function OverviewCard({
           <span className={styles.eyebrow}>For filmmakers &amp; producers</span>
           <h2>Start with your screenplay.</h2>
           <p className={styles.welcomeCopy}>
-            Compare two shoot plans. Bring locations, sources, and a shooting
+            Choose your shoot plans. Bring locations, sources, and a shooting
             schedule into one workspace.
           </p>
           {(busy || data.scriptStatus.tone === "attention") && (
@@ -298,20 +298,23 @@ function OverviewCanvas(props: ProductionOverviewProps) {
     props.uploadProgress,
   );
   const setupStage = overviewSetupStage(snapshot);
-  const setupWrites = setupStage !== "work";
-  const setupLabel =
-    setupStage === "work"
+  const setupWrites = !plans.length || setupStage !== "work";
+  const setupLabel = !plans.length
+    ? "Choose plans"
+    : setupStage === "work"
       ? plans.length
         ? "Open plans"
         : "Review selected scenes"
       : setupStage === "scenes"
-        ? "Choose scenes & start both"
-        : "Set up two plans";
-  const setupAction = setupWrites
-    ? props.onSetup
-    : plans.length
-      ? () => props.onPlan(plans[0].plan._id)
-      : props.onScenes;
+        ? "Choose scenes & start plans"
+        : "Set up selected plans";
+  const setupAction = !plans.length
+    ? (props.onAddPlans ?? props.onSetup)
+    : setupWrites
+      ? props.onSetup
+      : plans.length
+        ? () => props.onPlan(plans[0].plan._id)
+        : props.onScenes;
   const shared: OverviewNodeData = {
     ...props,
     editable,
@@ -334,7 +337,10 @@ function OverviewCanvas(props: ProductionOverviewProps) {
     {
       id: rootId,
       type: "overview",
-      position: { x: narrow || !plans.length ? 0 : 220, y: 0 },
+      position: {
+        x: narrow ? 0 : Math.max(0, plans.length - 1) * 220,
+        y: 0,
+      },
       width: narrow ? 360 : 400,
       measured: measurements[rootId],
       style: { pointerEvents: "auto" },
@@ -348,7 +354,7 @@ function OverviewCanvas(props: ProductionOverviewProps) {
       type: "overview",
       position: narrow
         ? { x: 0, y: 330 + index * 285 }
-        : { x: (index % 2) * 440, y: 330 + Math.floor(index / 2) * 285 },
+        : { x: index * 440, y: 330 },
       width: narrow ? 360 : 400,
       measured: measurements[`overview:${planState.plan._id}`],
       style: { pointerEvents: "auto" },
@@ -386,7 +392,7 @@ function OverviewCanvas(props: ProductionOverviewProps) {
       void flow.fitView({
         nodes: narrow ? [{ id: rootId }] : undefined,
         padding: 0.12,
-        minZoom: narrow ? 0.75 : 0.65,
+        minZoom: narrow ? 0.75 : 0.45,
         maxZoom: 1,
         duration: 0,
       });
@@ -406,6 +412,16 @@ function OverviewCanvas(props: ProductionOverviewProps) {
             <span className={styles.viewOnly}>
               {previewMode ? "Preview" : "View only"}
             </span>
+          )}
+          {script && plans.length > 0 && props.onAddPlans && (
+            <button
+              className={styles.setupButton}
+              onClick={props.onAddPlans}
+              disabled={!editable}
+            >
+              <GitBranch size={15} />
+              Add plans
+            </button>
           )}
           {script && (
             <button

@@ -154,3 +154,23 @@
     font-size: 24px;
   }
 }
+
+.variant-add-actions,
+.variant-option-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.variant-option-heading h3 {
+  margin: 0;
+  flex: 1;
+}
+.variant-option-heading svg {
+  margin: 0;
+}
+.variant-options section {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}

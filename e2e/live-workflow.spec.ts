@@ -197,7 +197,9 @@ test("live screenplay becomes a sourced plan and downloadable draft packet", asy
     await page
       .getByRole("button", { name: "Preparation packet", exact: true })
       .click();
-    await expect(page.getByText("Choose a production plan to review packet readiness.")).toBeVisible();
+    await expect(
+      page.getByText("Choose a production plan to review packet readiness."),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Canvas", exact: true }).click();
     await page
       .getByRole("button", { name: "Upload screenplay", exact: true })
@@ -232,6 +234,25 @@ FADE OUT.`);
       state!.runs.find((r) => r.kind === "ingest")!._id,
       "ingest",
     );
+    expect(state.entities.filter((e) => e.kind === "plan")).toHaveLength(0);
+    await refresh();
+    await client.mutation(api.variantSetup.createPlans, {
+      boardId: boardId!,
+      plans: [
+        {
+          key: "live-budget",
+          name: "Budget plan",
+          budgetMode: "fixed",
+          budgetMinor: 200000,
+        },
+        {
+          key: "live-uncapped",
+          name: "No fixed budget",
+          budgetMode: "uncapped",
+          budgetMinor: null,
+        },
+      ],
+    });
     const intake = state.entities.filter((e) => e.kind === "question");
     expect(intake.map((e) => e.data.key)).toEqual(
       expect.arrayContaining(["search_area", "production_activities"]),

@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { planReadiness } from "../../domain/plan-readiness";
 import { formatMoney, formatTime } from "../../domain/planning";
 import { useBoard } from "./board-context";
@@ -22,34 +23,32 @@ export function PlanComparison() {
     ready: planReadiness(plan, snapshot.entities, snapshot.choices),
     run: latestRun(snapshot.runs, "schedule", plan._id),
   }));
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selected = ready.filter((item) => selectedIds.includes(item.plan._id));
   const editable = snapshot.role !== "viewer" && !previewMode;
   const sameScenes =
-    ready.length === 2 &&
-    JSON.stringify([...ready[0].ready.sceneIds].sort()) ===
-      JSON.stringify([...ready[1].ready.sceneIds].sort());
+    ready.length > 1 &&
+    ready.every(
+      (item) =>
+        JSON.stringify([...item.ready.sceneIds].sort()) ===
+        JSON.stringify([...ready[0].ready.sceneIds].sort()),
+    );
   const current = plans.find((e) => e._id === activePlanId);
   const comparable = sameScenes && ready.every((r) => r.ready.currentSchedule);
-  const equivalent =
-    comparable &&
-    ready[0].ready.costs.partial === ready[1].ready.costs.partial &&
-    JSON.stringify(
-      ready[0].ready.proposed.entries.map((e) => [
+  const signature = (item: (typeof ready)[number]) =>
+    JSON.stringify([
+      item.ready.costs.partial,
+      item.ready.proposed.entries.map((e) => [
         e.sceneId,
         e.locationId,
         e.start,
         e.end,
         e.date,
       ]),
-    ) ===
-      JSON.stringify(
-        ready[1].ready.proposed.entries.map((e) => [
-          e.sceneId,
-          e.locationId,
-          e.start,
-          e.end,
-          e.date,
-        ]),
-      );
+    ]);
+  const equivalent =
+    comparable &&
+    ready.every((item) => signature(item) === signature(ready[0]));
   return (
     <section className="planning-view">
       <div className="planning-heading">
@@ -65,33 +64,37 @@ export function PlanComparison() {
         </p>
         <AsyncButton
           className="button primary"
-          pendingLabel="Queuing both plans…"
+          pendingLabel="Queuing selected plans…"
           disabled={
             !editable ||
             !actions.startPlans ||
-            ready.length !== 2 ||
-            ready.some((r) => r.ready.blockers.length || isPending(r.run))
+            !selected.length ||
+            selected.length > 8 ||
+            selected.some((r) => r.ready.blockers.length || isPending(r.run))
           }
           onClick={() =>
             act(
-              () => actions.startPlans!(plans.map((p) => p._id)),
-              "Both plan jobs queued independently",
+              () => actions.startPlans!(selected.map((p) => p.plan._id)),
+              "Selected plan jobs queued independently",
             )
           }
         >
-          Generate both shooting schedules
+          Generate selected schedules ({selected.length})
         </AsyncButton>
         <p className="small muted">
-          {sameScenes
-            ? "Both alternatives include the same scenes."
-            : "These alternatives have different scene sets; their totals are not directly comparable."}{" "}
+          {ready.length < 2
+            ? "Add another plan on the canvas to compare alternatives."
+            : sameScenes
+              ? "These alternatives include the same scenes."
+              : "These alternatives have different scene sets; their totals are not directly comparable."}{" "}
           Shared retrieved evidence is reused; location choices stay
           independent.
         </p>
         {equivalent && (
           <p className="notice">
-            Both current results have equivalent selected locations, timing and
-            totals. The cap and priorities differ.
+            These current results have equivalent selected locations, timing and
+            totals. Different caps or priorities do not guarantee different
+            outcomes.
           </p>
         )}
         {comparable && !equivalent && (
@@ -133,6 +136,22 @@ export function PlanComparison() {
                   Settings & scenes
                 </button>
               </div>
+              <label className="schedule-selection">
+                <input
+                  type="checkbox"
+                  aria-label={`Generate ${p.data.name}`}
+                  checked={selectedIds.includes(p._id)}
+                  disabled={!editable}
+                  onChange={(event) =>
+                    setSelectedIds((previous) =>
+                      event.target.checked
+                        ? [...previous, p._id]
+                        : previous.filter((id) => id !== p._id),
+                    )
+                  }
+                />
+                Include in generation
+              </label>
               <h2>{p.data.name}</h2>
               <button
                 className={`button small-button ${activePlanId === p._id ? "primary" : ""}`}
@@ -270,7 +289,10 @@ export function PlanComparison() {
         })}
       </div>
       {!plans.length && (
-        <p>Upload a screenplay and generate scenes to create your plans.</p>
+        <p>
+          Upload a screenplay, then choose the plan branches you want on the
+          canvas.
+        </p>
       )}
     </section>
   );

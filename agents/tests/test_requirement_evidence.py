@@ -1,5 +1,7 @@
 from copy import deepcopy
 
+import pytest
+
 from sceneatlas.research import attach_requirement_passage, normalize_sources
 
 URL = 'https://www.parks.ca.gov/leocarrillo'
@@ -63,3 +65,44 @@ def test_small_crew_cannot_establish_simple_shoot_eligibility():
     assert 'authority must confirm' in normalized['detail']
     assert 'qualifies' not in normalized['detail']
     assert normalized['attachments'] == [] and 'formUrl' not in normalized
+
+
+@pytest.mark.parametrize('excerpt', [
+    'Student filming may use school liability insurance. A $50 review fee applies. The film permit coordinator confirms requirements.',
+    'Insurance requires $1 million general liability coverage. Contact the film permit coordinator.',
+    'Insurance requires $1 million general liability and $50,000 automobile liability coverage.',
+])
+def test_insurance_vocabulary_cannot_substantiate_missing_coverage_amounts(excerpt):
+    result, evidence = fixture()
+    result['locations'][0]['requirements'][0].update(title='Insurance Requirements',
+        detail='Insurance requires $1 million general liability and $500,000 automobile liability coverage.')
+    evidence['results'][0]['excerpt'] = excerpt
+    req = normalize_sources(result, evidence)['locations'][0]['requirements'][0]
+    assert req['status'] == 'unresolved'
+    assert '$1 million' not in req['detail'] and '$500,000' not in req['detail']
+    assert req['attachments'] == [] and 'formUrl' not in req
+
+
+@pytest.mark.parametrize('detail', [
+    'Insurance requires $1 million general liability and $500,000 automobile liability coverage.',
+    'Insurance requires 1 million dollars general liability and 500000 USD automobile liability coverage.',
+])
+def test_matching_extract_preserves_exact_insurance_coverage_passage(detail):
+    result, evidence = fixture()
+    result['locations'][0]['requirements'][0].update(title='Insurance Requirements',
+        detail=detail)
+    text = 'Insurance requirements: USD 1,000,000 general liability and $500,000 automobile liability coverage. Confirm applicability with the authority.'
+    extracted = {'retrievedAt': 200, 'results': [{'url': URL, 'full_content': text}]}
+    req = normalize_sources(result, evidence, extracted_evidence=extracted)['locations'][0]['requirements'][0]
+    assert req['status'] == 'sourced' and req['externalStatus'] == 'unverified'
+    assert req['sources'][0]['excerpt'] == text
+    assert req['sources'][0]['retrievedAt'] == 200
+
+
+def test_unrelated_park_coverage_amounts_cannot_supply_insurance_evidence():
+    result, evidence = fixture()
+    detail = 'Insurance requires $1 million general liability and $500,000 automobile liability coverage.'
+    result['locations'][0]['requirements'][0].update(title='Insurance Requirements', detail=detail)
+    extracted = {'retrievedAt': 200, 'results': [{'url': 'https://www.parks.ca.gov/another-park', 'full_content': detail}]}
+    req = normalize_sources(result, evidence, extracted_evidence=extracted)['locations'][0]['requirements'][0]
+    assert req['status'] == 'unresolved' and req['sources'][0]['retrievedAt'] == 100

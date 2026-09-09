@@ -7,6 +7,7 @@ import re
 import socket
 import threading
 import time
+from decimal import Decimal
 from urllib.parse import urlparse
 from parallel import AsyncParallel, APIConnectionError, APIStatusError
 
@@ -254,11 +255,32 @@ def attach_fee_amount_evidence(cost: dict, extracted: dict | None = None) -> boo
     return False
 
 
+def monetary_values(text: str) -> set[tuple[str, Decimal]]:
+    """Normalize explicit currency amounts, including insurance shorthand such as $1 million."""
+    number = r"\d+(?:,\d{3})*(?:\.\d+)?"
+    scale = r"(?:\s*(?P<scale>thousand|million|billion|k|m)\b)?"
+    patterns = [
+        rf"(?<!\w)(?P<currency>US\s*\$|\$|USD|EUR|€|GBP|£)\s*(?P<number>{number}){scale}(?![\d,]|\.\d)",
+        rf"(?<![\w$,])(?P<number>{number}){scale}\s*(?P<currency>USD|US dollars?|dollars?|EUR|euros?|GBP|pounds?)\b",
+    ]
+    currencies = {"$": "USD", "US$": "USD", "DOLLAR": "USD", "DOLLARS": "USD", "USDOLLAR": "USD", "USDOLLARS": "USD",
+                  "€": "EUR", "EURO": "EUR", "EUROS": "EUR", "£": "GBP", "POUND": "GBP", "POUNDS": "GBP"}
+    scales = {None: 1, "thousand": 1000, "k": 1000, "million": 1000000, "m": 1000000, "billion": 1000000000}
+    values = set()
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, re.I):
+            currency = re.sub(r"\s", "", match["currency"]).upper()
+            amount = Decimal(match["number"].replace(",", "")) * scales[(match["scale"] or "").lower() or None]
+            values.add((currencies.get(currency, currency), amount))
+    return values
+
+
 def attach_requirement_passage(source: dict, requirement: dict, extracted: dict | None = None) -> bool:
     """Keep a relevant provider passage instead of a page title; not an entailment or approval check."""
     words = lambda text: set(re.findall(r"\b\w{4,}\b", text.lower()))
     stop = {"this", "that", "with", "from", "have", "will", "must", "should", "their", "your", "there"}
     terms = words(" ".join(requirement.get(key, "") for key in ["title", "detail"])) - stop
+    claimed_amounts = monetary_values(" ".join(requirement.get(key, "") for key in ["title", "detail"]))
     title_words = words(source.get("title", ""))
     passages = [(source.get("excerpt", ""), None)]
     if not source.get("cached"):
@@ -272,7 +294,10 @@ def attach_requirement_passage(source: dict, requirement: dict, extracted: dict 
             passage = text[start:start + 1600]
             content = words(passage) - stop
             score = len((content - title_words) & terms)
-            if content - title_words and score >= 2:
+            # Shared vocabulary alone cannot substantiate precise financial
+            # claims (for example, insurance coverage limits). Keep them
+            # unresolved unless the same applicable passage contains each sum.
+            if content - title_words and score >= 2 and claimed_amounts <= monetary_values(passage):
                 candidates.append((score, passage, retrieved_at))
     if not candidates:
         return False
